@@ -8,8 +8,7 @@
 #include <math.h>
 #include <gmp.h>
 
-#define KMAX 6
-#define BMAX 1 << (KMAX - 1)	// 2**(kmax - 1)
+#define KMAX 12
 
 typedef struct {
 	mpz_t a;
@@ -36,6 +35,7 @@ typedef struct {
 				// together to produce A, this will be close enough to the ideal value of A = sqrt(2N)/M. 
 				
 	uint32_t ng;		// number of values in the pool
+	uint32_t k;		// the same k as in the nsieve_t
 	uint32_t *frogs;	// the last used set of g values. A call to advance_gpool will get the next set of values. 
 } poly_gpool_t;
 

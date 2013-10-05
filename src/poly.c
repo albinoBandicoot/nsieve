@@ -3,7 +3,7 @@
 void polygroup_init (poly_group_t *pg, nsieve_t *ns){
 	mpz_init (pg->a);
 	pg->ainverses = (uint32_t *) malloc(ns->fb_len * sizeof(uint32_t));
-	pg->bvals = (mpz_t *) malloc( ns->bvals * sizeof (mpz_t *));
+	pg->bvals = (mpz_t *) malloc( ns->bvals * sizeof (mpz_t));
 	for (int i=0; i < ns->bvals; i++){
 		mpz_init (pg->bvals[i]);
 	}
@@ -24,6 +24,18 @@ void poly_init (poly_t *p){
 
 void poly_free (poly_t *p){
 	mpz_clears (p->a, p->b, p->c, p->istart, NULL);
+}
+
+void poly_print (poly_t *p){
+	printf("Q(x) = ");
+	mpz_out_str(stdout, 10, p->a);
+	printf("*x^2 + 2*");
+	mpz_out_str(stdout, 10, p->b);
+	printf("*x + ");
+	mpz_out_str(stdout, 10, p->c);
+	printf(" \t start = ");
+	mpz_out_str(stdout, 10, p->istart);
+	printf("\n");
 }
 
 uint32_t pi (uint32_t x){	// rough estimate of the prime-counting function. Implemented as x/ln(x).
@@ -129,12 +141,41 @@ void gpool_init (poly_gpool_t *gp, nsieve_t *ns){
 	for (int i=0; i < k; i++){
 		gp->frogs[i] = i;
 	}
+	gp->k = k;
 	ns->k = k;
 	ns->bvals = 1 << (k-1);
 }
-	
 
-void generate_polygroup (poly_group_t *pg, nsieve_t *ns){
+void advance_gpool (poly_gpool_t *gp, poly_group_t *group){	// advances the frogs, and sets the gvals field of 'group'
+	int k = gp->k;
+	// update group->gvals
+	for (int i=0; i<k; i++){
+		group->gvals[i] = gp->gpool[gp->frogs[i]];
+	}
+
+	// now advance the frogs.
+	int ng = gp->ng;	// these are just for convenience.
+	int j = k-1;
+	while (gp->frogs[j] == ng-j){
+		j--;
+		if (j < 0){	// then we ran out of polynomials.
+			printf("Fatal error: Out of polynomials!!!\n");
+			exit(1);
+		}
+	}
+	// j is now the index of the first frog that is not jammed against the end of the pool. Or edge of the pond, I suppose. Its name is Billy.
+	// I guess for the frogs' sake its a good thing I'm not writing this in Python.
+	gp->frogs[j] ++;	// advance Billy.
+	// now move all of the beached frogs back to being just ahead of billy, with no space between any of them.
+	int billy = j;
+	j++;
+	while (j < k){	// most of the time, this won't even execute, since we'll just be advancing the highest frog.
+		gp->frogs[j] = gp->frogs[billy] + (j - billy);
+		j++;
+	}
+}
+
+void generate_polygroup (poly_gpool_t *gp, poly_group_t *pg, nsieve_t *ns){
 	/* This is a tricky one. First we must choose A, by picking k primes g_i, and multiplying them together.
 	 * Then we need to find all of the values of B which satisfy  B^2 = N (mod a). There will be 2^(k-1) of them. 
 	 * Then we will compute the values of A^-1 (mod p) for each p in the factor base. This is really a precomputation
@@ -144,7 +185,11 @@ void generate_polygroup (poly_group_t *pg, nsieve_t *ns){
 	// We want A to be about sqrt (2N) / M. Thus the primes we're looking at should be around [sqrt(2n)/M)] ^ (1/k).
 	// However, there is no particular requirement that they be of comparable sizes, so this is just a rough guide.
 	
-
+	advance_gpool (gp, pg);
+	mpz_set_ui (pg->a, pg->gvals[0]);	// multiply all of the g-values together to get A.
+	for (int i=1; i < gp->k; i++){
+		mpz_mul_ui(pg->a, pg->a, pg->gvals[i]);
+	}
 	
 	/* Now that we've chosen A, we can compute the values of B. The goal is to produce all values of B which satisfy 
 	 * B^2 = N (mod A). Since A is composite, this is a little tricky, but we know it's prime factorization (that's how we
@@ -182,8 +227,9 @@ void generate_polygroup (poly_group_t *pg, nsieve_t *ns){
 	// now do the main loop
 	mpz_t t1, t2;		// temps
 	mpz_inits (t1, t2, NULL);
+	int w = 0;
 	for (int z = 0; z < (1 << k); z++){	// the ith bit of z will control which root r_i_? is used for the current B computation.
-		mpz_set_ui (pg->bvals[z], 0);	// clear the B-value
+		mpz_set_ui (pg->bvals[w], 0);	// clear the B-value
 		for (int i=0; i < k; i++){	// for each G-value
 			mpz_set_ui (t2, pg->gvals[i]);			// t2 = g_i
 			mpz_divexact_ui (t1, pg->a, pg->gvals[i]);	// t1 = A / g_i
@@ -192,9 +238,15 @@ void generate_polygroup (poly_group_t *pg, nsieve_t *ns){
 			// pick the root according to the i'th least siginificant bit of z.
 			int root = (z & (1 << i)) == 0 ? 0 : 1;
 			mpz_mul_ui (t2, t2, r[i][root]);
-			mpz_add (pg->bvals[z], pg->bvals[z], t2);
+			mpz_add (pg->bvals[w], pg->bvals[w], t2);
 		}
-		mpz_mod (pg->bvals[z], pg->bvals[z], pg->a);	// take the sum mod A.
+		mpz_mod (pg->bvals[w], pg->bvals[w], pg->a);	// take the sum mod A.
+		// if it's over A/2, reject it as the negation of another square root.
+		mpz_mul_ui(pg->bvals[w], pg->bvals[w], 2);
+		if (mpz_cmp (pg->bvals[w], pg->a) < 1){	// it's good
+			mpz_divexact_ui (pg->bvals[w], pg->bvals[w], 2);
+			w ++;
+		}
 	}
 
 	// Now that we've chosen A and determined the values of B, we compute A^-1 (mod p) for each prime in the factor base.
@@ -219,6 +271,10 @@ void generate_poly (poly_t *p, poly_group_t *pg, nsieve_t *ns, int i){
 	mpz_mul (p->c, p->b, p->b);	 // C = b^2
 	mpz_sub (p->c, p->c, ns->N);	 // C = b^2 - N
 	mpz_divexact (p->c, p->c, p->a); // C = (b^2 - N) / a
+	// now find the interval. This is centered on -b/a (the vertex of the parabola), and extends M in either direction. We compute the low end of the interval.
+	mpz_tdiv_q (p->istart, p->b, p->a);
+	mpz_neg (p->istart, p->istart);
+	mpz_sub_ui (p->istart, p->istart, ns->M);
 }
 
 void poly (mpz_t res, poly_t *p, uint32_t offset){

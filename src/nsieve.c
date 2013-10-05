@@ -71,20 +71,26 @@ void nsieve_init (nsieve_t *ns, mpz_t n){
 
 /* Once ns has been initialized (by calling nsieve_init), this method is called to actaully perform the bulk of the factorization */
 void factor (nsieve_t *ns){
+	poly_gpool_t gpool;
+	gpool_init (&gpool, ns);
+
 	poly_group_t curr_polygroup;
 	poly_t curr_poly;
 	polygroup_init (&curr_polygroup, ns);
 	poly_init (&curr_poly);
 
 	block_data_t sievedata;
-	while (ns->nfull + ns->npartial < ns->rels_needed){
+//	while (ns->nfull + ns->npartial < ns->rels_needed){
 		// while we don't have enough relations, sieve another poly group.
-		generate_polygroup (&curr_polygroup, ns);
+		generate_polygroup (&gpool, &curr_polygroup, ns);
 		for (int i = 0; i < ns -> bvals; i ++){
 			generate_poly (&curr_poly, &curr_polygroup, ns, i);
-			sieve_poly (&sievedata, &curr_poly, ns);
+			poly_print (&curr_poly);
+			printf("\n");
+		//	sieve_poly (&sievedata, &curr_poly, ns);
 		}
-	}
+		return;
+//	}
 	// now we have enough relations, so we build the matrix (combining the partials).
 	build_matrix (ns);	// this includes combining the partials (and cycle-finding if we do double large primes)
 
@@ -105,9 +111,6 @@ int main (int argc, const char *argv[]){
 		mpz_inp_str (n, stdin, 10);
 	}
 	nsieve_init (&ns, n);
-	ns.k = atoi(argv[2]);
-	poly_gpool_t gpool;
-	gpool_init (&gpool, &ns);
 
-	//factor (&ns);
+	factor (&ns);
 }
