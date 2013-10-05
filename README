@@ -1,0 +1,5 @@
+Welcome to nsieve, my implementation of the self-initializing quadratic sieve.
+It probably won't compete with amazing programs like msieve and yafu: its
+purpose is mostly for my own education. 
+
+Nsieve relies on GMP for its arbitrary precision arithmetic. 
