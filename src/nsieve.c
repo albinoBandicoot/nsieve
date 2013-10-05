@@ -38,7 +38,7 @@ void extract (nsieve_t *ns, char *vals){
 /* Generates the factor base, given the bound fb_bound; will also compute the roots of N mod each p. */
 void generate_fb (nsieve_t *ns){
 	// first we use the sieve of Eratosthenes and the mpz_kronecker function to find a list of primes p < fb_bound such that (n/p) = 1.
-	char *erasieve_vals = (char *)(malloc(ns->fb_bound * sizeof(char)));
+	char *erasieve_vals = (char *)(calloc(ns->fb_bound, sizeof(char)));
 	era_sieve (ns, erasieve_vals);
 	extract (ns, erasieve_vals);
 	free (erasieve_vals);
@@ -48,6 +48,7 @@ void generate_fb (nsieve_t *ns){
 	for (int i=0; i<ns->fb_len; i++){
 		ns->roots[i] = find_root (ns->N, ns->fb[i]);	// see common.c for the implementation of this method.
 		// note that there are actually 2 square roots; however, the second may be obtained readily as p - sqrt#1, so only one is stored.
+		ns->fb_logs[i] = fast_log (ns->fb[i]);
 	}
 }
 
@@ -83,6 +84,10 @@ void factor (nsieve_t *ns){
 //	while (ns->nfull + ns->npartial < ns->rels_needed){
 		// while we don't have enough relations, sieve another poly group.
 		generate_polygroup (&gpool, &curr_polygroup, ns);
+		printf("\nThe inverses of A (mod p) for each prime in the factor base: \n");
+		for (int i=0; i<ns->fb_len; i++){
+			printf("p = %d \tA^-1 = %d \tsqrt(n) mod p: %d\n", ns->fb[i], curr_polygroup.ainverses[i], ns->roots[i]);
+		}
 		for (int i = 0; i < ns -> bvals; i ++){
 			generate_poly (&curr_poly, &curr_polygroup, ns, i);
 			poly_print (&curr_poly);

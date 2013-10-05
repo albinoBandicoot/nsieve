@@ -19,11 +19,11 @@ void polygroup_free (poly_group_t *pg, nsieve_t *ns){
 }
 
 void poly_init (poly_t *p){
-	mpz_inits (p->a, p->b, p->c, p->istart, NULL);
+	mpz_inits (p->a, p->b, p->c, NULL);
 }
 
 void poly_free (poly_t *p){
-	mpz_clears (p->a, p->b, p->c, p->istart, NULL);
+	mpz_clears (p->a, p->b, p->c, NULL);
 }
 
 void poly_print (poly_t *p){
@@ -33,8 +33,6 @@ void poly_print (poly_t *p){
 	mpz_out_str(stdout, 10, p->b);
 	printf("*x + ");
 	mpz_out_str(stdout, 10, p->c);
-	printf(" \t start = ");
-	mpz_out_str(stdout, 10, p->istart);
 	printf("\n");
 }
 
@@ -271,22 +269,14 @@ void generate_poly (poly_t *p, poly_group_t *pg, nsieve_t *ns, int i){
 	mpz_mul (p->c, p->b, p->b);	 // C = b^2
 	mpz_sub (p->c, p->c, ns->N);	 // C = b^2 - N
 	mpz_divexact (p->c, p->c, p->a); // C = (b^2 - N) / a
-	// now find the interval. This is centered on -b/a (the vertex of the parabola), and extends M in either direction. We compute the low end of the interval.
-	mpz_tdiv_q (p->istart, p->b, p->a);
-	mpz_neg (p->istart, p->istart);
-	mpz_sub_ui (p->istart, p->istart, ns->M);
 }
 
-void poly (mpz_t res, poly_t *p, uint32_t offset){
-	// evaluate Ax^2 + 2Bx + C  where x = istart + offset
+void poly (mpz_t res, poly_t *p, uint32_t x){
+	// evaluate Ax^2 + 2Bx + C 
 	// = (((A * X) + 2B) * X) + C
-	mpz_t x;
-	mpz_inits  (x, NULL);
-	mpz_add_ui (x, p->istart, offset);	// x = istart + offset
-	mpz_mul    (res, p->a, x);
-	mpz_add    (res, res, p->b);
-	mpz_add    (res, res, p->b);
-	mpz_mul    (res, res, x);
-	mpz_add    (res, res, p->c);
-	mpz_clear  (x);
+	mpz_mul_ui (res, p->a, x);	// res = ax
+	mpz_add    (res, res, p->b);	// res = ax + b
+	mpz_add    (res, res, p->b);	// res = ax + 2b
+	mpz_mul_ui (res, res, x);	// res = ax^2 + 2bx
+	mpz_add    (res, res, p->c);	// res = ax^2 + 2bx + c
 }

@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <string.h>
 #include <gmp.h>
 
 #define KMAX 12
@@ -14,7 +15,7 @@ typedef struct {
 	mpz_t a;
 	mpz_t b;
 	mpz_t c;
-	mpz_t istart;		// the start of the sieving interval. The end is istart + M. This way we can keep rel_t short by only storing an int offset from istart.
+//	it turns out we don't need to keep istart, since it is (-b/a) - M. This is because b is produced as the solution to a congruence equation mod a, so it must be < a, so (-b/a) is in [-1, 1]. Thus the sieve interval can be taken to always be [-M, M].
 } poly_t;
 
 /* This struct defines state for selecting the values of 'g' that are multiplied together to produce the polynomial group 'A' values. 
@@ -39,9 +40,9 @@ typedef struct {
 	uint32_t *frogs;	// the last used set of g values. A call to advance_gpool will get the next set of values. 
 } poly_gpool_t;
 
-typedef struct {	// represents a relation, poly(istart+x) = 
+typedef struct {	// represents a relation, poly(x) = 
 	poly_t  *poly;
-	uint32_t  x;	// offset from poly->istart; this can be unsigned since istart is the lower bound, and all offsets will be >=0. 
+	uint32_t  x;
 	uint32_t cofactor;
 } rel_t;
 
@@ -72,6 +73,7 @@ typedef struct {
 	int           extra_rels;	// number of relations more than the factor base size to collect.
 	uint32_t      rels_needed;	// this should be equal to fb_len + extra_rels; it is here for convenience.
 	uint32_t *fb;		// the actual primes
+	uint8_t  *fb_logs;	// approximations to log_2 (p)
 	uint32_t *roots;	// the values of sqrt(n) mod p   for each p in the factor base. Computed once and for all at the beginning.
 
 	uint32_t nfull;		// running count of the number of full relations found thus far.
