@@ -7,7 +7,7 @@ void era_sieve (nsieve_t *ns, char *vals){
 		if (vals[skip-2] == 1){
 			continue;
 		}
-		for (int pos=2*skip, pos < ns->fb_bound, pos += skip){
+		for (int pos=2*skip; pos < ns->fb_bound; pos += skip){
 			vals[pos-2] = 1;
 		}
 	}
@@ -15,8 +15,8 @@ void era_sieve (nsieve_t *ns, char *vals){
 
 void extract (nsieve_t *ns, char *vals){
 	// first count the number of primes found such that (n/p) = 1. (n/p) is the Legendre symbol.
-	int count = 1;	// 2 is always included.
-	for (int i=1; i < ns->fb_bound; i++){	// starting at 1 beacuse we must always include 2.
+	int count = 0;
+	for (int i=0; i < ns->fb_bound; i++){
 		if (vals[i] == 0){
 			if (mpz_kronecker_ui(ns->N, i+2) == 1){
 				count++;
@@ -26,9 +26,8 @@ void extract (nsieve_t *ns, char *vals){
 	ns->fb_len = count;
 	ns->rels_needed = ns->fb_len + ns->extra_rels;
 	ns->fb = (uint32_t *)(malloc(count * sizeof(uint32_t)));
-	ns->fb[0] = 2;
-	int w = 1;
-	for (int i=1; i < ns->fb_bound; i++){
+	int w = 0;
+	for (int i=0; i < ns->fb_bound; i++){
 		if (vals[i] == 0 && mpz_kronecker_ui(ns->N, i+2) == 1){
 			ns->fb[w] = i+2;
 			w++;
@@ -57,7 +56,7 @@ void generate_fb (nsieve_t *ns){
  */
 void nsieve_init (nsieve_t *ns, mpz_t n){
 	// all of the parameters here are complete BS for now.
-	ns->N = n;
+	mpz_init_set (ns->N, n);
 	ns->k = 3;
 	ns->bvals = 1 << (ns->k - 1);
 	ns->M = 8 * BLOCKSIZE;	
@@ -66,7 +65,7 @@ void nsieve_init (nsieve_t *ns, mpz_t n){
 
 	generate_fb (ns);
 
-	relns = (matrel_t *)(malloc((ns->fb_len + ns->extra_rels) * sizeof(matrel_t)));
+	ns->relns = (matrel_t *)(malloc((ns->fb_len + ns->extra_rels) * sizeof(matrel_t)));
 	ht_init (ns);
 }
 
@@ -74,13 +73,16 @@ void nsieve_init (nsieve_t *ns, mpz_t n){
 void factor (nsieve_t *ns){
 	poly_group_t curr_polygroup;
 	poly_t curr_poly;
+	polygroup_init (&curr_polygroup, ns);
+	poly_init (&curr_poly);
+
 	block_data_t sievedata;
 	while (ns->nfull + ns->npartial < ns->rels_needed){
 		// while we don't have enough relations, sieve another poly group.
-		generate_polygroup (&curr_polygroup);
+		generate_polygroup (&curr_polygroup, ns);
 		for (int i = 0; i < ns -> bvals; i ++){
-			generate_poly (&poly, &polygroup, ns, i);
-			sieve_poly (&sievedata, &poly, ns);
+			generate_poly (&curr_poly, &curr_polygroup, ns, i);
+			sieve_poly (&sievedata, &curr_poly, ns);
 		}
 	}
 	// now we have enough relations, so we build the matrix (combining the partials).
@@ -103,5 +105,9 @@ int main (int argc, const char *argv[]){
 		mpz_inp_str (n, stdin, 10);
 	}
 	nsieve_init (&ns, n);
-	factor (&ns);
+	ns.k = atoi(argv[2]);
+	poly_gpool_t gpool;
+	gpool_init (&gpool, &ns);
+
+	//factor (&ns);
 }

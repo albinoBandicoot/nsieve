@@ -1,6 +1,44 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#include <ctype.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <math.h>
+#include <gmp.h>
+
+#define KMAX 6
+#define BMAX 1 << (KMAX - 1)	// 2**(kmax - 1)
+
+typedef struct {
+	mpz_t a;
+	mpz_t b;
+	mpz_t c;
+	mpz_t istart;		// the start of the sieving interval. The end is istart + M. This way we can keep rel_t short by only storing an int offset from istart.
+} poly_t;
+
+/* This struct defines state for selecting the values of 'g' that are multiplied together to produce the polynomial group 'A' values. 
+ * The optimal value for A is about sqrt(2N/M), so if for simplicity we choose g_i of roughly equal size, each one should be about A^(1/k).
+ * Thus, we generate a list of potential g (primes such that (n/g) = 1) that are near this A^(1/k) value (called 'center' in the struct).
+ * It is likely that these values will be inside the factor base, so no extra work needs to be done to find them.
+ *
+ * Once we have selected the values, we need a way to iterate through the various combinations of g values. There are |gpool| C k  of them.
+ * We initialize k 'frogs' to be the first (lowest) k primes in the gpool. Then, whenever advance_gpool is called, the highest frog (in the
+ * k'th position of frogs) hops one slot forward. If it can't (it's at the end of gpool), the next one back tries to hop forwards. This 
+ * continues until a frog is found who can hop (Billy). Then, all the frogs higher than Billy (which were jammed up at the top of gpool) are
+ * set immediately following Billy. A large enough gpool will be chosen so that we won't run out of combinations. 
+*/
+typedef struct {
+	uint32_t center;	// (sqrt(2N)/M)^(1/k)
+	uint32_t *gpool;	// a list of allowable values of G. The idea here is to pick a certain number of primes g such that (n/g) = 1 on
+				// either side of center. These will be close enough to center that whatever subset of k of them we decide to multiply
+				// together to produce A, this will be close enough to the ideal value of A = sqrt(2N)/M. 
+				
+	uint32_t ng;		// number of values in the pool
+	uint32_t *frogs;	// the last used set of g values. A call to advance_gpool will get the next set of values. 
+} poly_gpool_t;
+
 typedef struct {	// represents a relation, poly(istart+x) = 
 	poly_t  *poly;
 	uint32_t  x;	// offset from poly->istart; this can be unsigned since istart is the lower bound, and all offsets will be >=0. 
@@ -13,14 +51,14 @@ typedef struct {	// One of these gets associated with each row in the matrix. r2
 	uint64_t *row;	// the row of the matrix, packed into 64-bit ints.
 } matrel_t;	
 
-typedef struct {	// struct for the linked list in the separate-chaining hashtable for storing partial relations
+typedef struct htentry{	// struct for the linked list in the separate-chaining hashtable for storing partial relations
 	rel_t *rel;	// the relation. This is a pointer because we'll need the pointers for constructing the matrel_t's.
-	ht_entry_t *next;	// pointer to the next reln in this bucket; NULL if it's the last one.
+	struct htentry *next;	// pointer to the next reln in this bucket; NULL if it's the last one.
 } ht_entry_t;
 
 typedef struct {
 	uint32_t nbuckets;
-	ht_entry_t *buckets;
+	ht_entry_t **buckets;
 } hashtable_t;
 
 typedef struct {

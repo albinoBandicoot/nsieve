@@ -7,14 +7,17 @@ vpath %.o build/
 
 OBJECTS= build/*.o
 
-all: nsieve numgen
+all: nsieve numgen prcheck
+
+prcheck: prcheck.c
+	$(CC) $(CFLAGS) -o bin/prcheck src/prcheck.c -lgmp
 
 numgen: numgen.c
 	$(CC) $(CFLAGS) -o bin/numgen src/numgen.c -lgmp
 
 nsieve: poly.o sieve.o common.o filter.o nsieve.o matrix.o
-	ar rc build/libnsieve.a ${OBJECTS}
-	$(CC) $(CFLAGS) -o bin/nsieve src/nsieve.c -Lbuild/ -lnsieve
+	ar rc build/libnsieve.a ${OBJECTS} 
+	$(CC) $(CFLAGS) -o bin/nsieve src/nsieve.c -Lbuild/ -lnsieve -lgmp -lm
 
 poly.o:	poly.c poly.h 
 	$(CC) $(CFLAGS) -c -o build/poly.o src/poly.c 
