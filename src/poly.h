@@ -26,6 +26,6 @@ void poly_free (poly_t *);
 
 void poly_print (poly_t *);
 
-void poly (mpz_t res, poly_t *, uint32_t offset);	// evaluate the polynomial at poly->istart + offset.
+void poly (mpz_t res, poly_t *, int32_t offset);	// evaluate the polynomial at poly->istart + offset.
 
 #endif

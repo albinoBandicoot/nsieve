@@ -1,5 +1,28 @@
 #include "common.h"
 
+/* Matrix row get/set */
+
+// important note: the matrix positions are like this: [63, 62, ... 1, 0][127, 126, ... 65, 64] etc.
+// This is so that position p can be found in block p/64 at bit (1 << p % 64).
+
+void clear_row (matrel_t *m, nsieve_t *ns){
+	for (int i=0; i < ns->row_len; i++){
+		m->row[i] = 0;
+	}
+}
+
+int get_bit (matrel_t *m, int pos){
+	int block = pos/64;
+	uint64_t mask = 1 << (pos % 64);
+	return (m->row[block] & mask) > 0 ? 1 : 0;
+}
+
+void flip_bit (matrel_t *m, int pos){
+	int block = pos/64;
+	uint64_t mask = 1 << (pos % 64);
+	m->row[block] = m->row[block] ^ mask;
+}
+
 /* Hashtable functions */
 
 void ht_init (nsieve_t *ns){			// allocates space for and initializes the hashtable stored in the nsieve_t.

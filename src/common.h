@@ -10,11 +10,13 @@
 #include <gmp.h>
 
 #define KMAX 12
+#define BLOCKSIZE 16384
 
 typedef struct {
 	mpz_t a;
 	mpz_t b;
 	mpz_t c;
+	uint32_t M;	// we compute this on a per-polynomial basis. The value we store is rounded to the nearest multiple of BLOCKSIZE.
 //	it turns out we don't need to keep istart, since it is (-b/a) - M. This is because b is produced as the solution to a congruence equation mod a, so it must be < a, so (-b/a) is in [-1, 1]. Thus the sieve interval can be taken to always be [-M, M].
 } poly_t;
 
@@ -79,11 +81,18 @@ typedef struct {
 	uint32_t nfull;		// running count of the number of full relations found thus far.
 	uint32_t npartial;	// running count of the number of partial relations found so far. This will be updated by calling ht_count, probably at the end of each batch of polynomials (or maybe after each poly, depending on how many relations are being recovered from each poly vs. group)).
 
+	uint32_t row_len;	// number of 64-bit chunks in a row of the matrix.
 	matrel_t *relns;	// this is the list of relations, and also constitutes the matrix. 
+
+	uint32_t lp_bound;	// large prime bound. Relations with one factor between the top of the factor base and lp_bound are admitted as partials.
 	hashtable_t partials;	// hashtable for storing partial relations. This might have to change for double large primes.
 
 } nsieve_t;
 
+/* Matrix row get/set */
+void clear_row (matrel_t *, nsieve_t *);
+void flip_bit (matrel_t *, int);
+int  get_bit  (matrel_t *, int);
 
 /* Hashtable functions */
 

@@ -16,9 +16,9 @@ void era_sieve (nsieve_t *ns, char *vals){
 void extract (nsieve_t *ns, char *vals){
 	// first count the number of primes found such that (n/p) = 1. (n/p) is the Legendre symbol.
 	int count = 0;
-	for (int i=0; i < ns->fb_bound; i++){
+	for (int i=0; i < ns->fb_bound-2; i++){
 		if (vals[i] == 0){
-			if (mpz_kronecker_ui(ns->N, i+2) == 1){
+			if (i == 0 || mpz_kronecker_ui(ns->N, i+2) == 1){	// we must admit 2, since N is always a QR mod 2, but there's something wierd about the kronecker symbol for 2  because it's not odd.
 				count++;
 			}
 		}
@@ -27,8 +27,8 @@ void extract (nsieve_t *ns, char *vals){
 	ns->rels_needed = ns->fb_len + ns->extra_rels;
 	ns->fb = (uint32_t *)(malloc(count * sizeof(uint32_t)));
 	int w = 0;
-	for (int i=0; i < ns->fb_bound; i++){
-		if (vals[i] == 0 && mpz_kronecker_ui(ns->N, i+2) == 1){
+	for (int i=0; i < ns->fb_bound-2; i++){
+		if (vals[i] == 0 && (i == 0 || mpz_kronecker_ui(ns->N, i+2) == 1)){
 			ns->fb[w] = i+2;
 			w++;
 		}
@@ -45,6 +45,7 @@ void generate_fb (nsieve_t *ns){
 
 	// now we compute the modular square roots of n mod each p. 
 	ns->roots = (uint32_t *)(malloc(ns->fb_len * sizeof(uint32_t)));
+	ns->fb_logs = (uint8_t *)(malloc(ns->fb_len * sizeof(uint8_t)));
 	for (int i=0; i<ns->fb_len; i++){
 		ns->roots[i] = find_root (ns->N, ns->fb[i]);	// see common.c for the implementation of this method.
 		// note that there are actually 2 square roots; however, the second may be obtained readily as p - sqrt#1, so only one is stored.
@@ -60,13 +61,21 @@ void nsieve_init (nsieve_t *ns, mpz_t n){
 	mpz_init_set (ns->N, n);
 	ns->k = 3;
 	ns->bvals = 1 << (ns->k - 1);
-	ns->M = 8 * BLOCKSIZE;	
-	ns->fb_bound = 2000;
+	ns->M = 3 * BLOCKSIZE;	
+	ns->fb_bound = 15000;
 	ns->extra_rels = 48;
+
+	ns->nfull = 0;
+	ns->npartial = 0;
 
 	generate_fb (ns);
 
 	ns->relns = (matrel_t *)(malloc((ns->fb_len + ns->extra_rels) * sizeof(matrel_t)));
+	ns->row_len = (ns->fb_len)/sizeof(uint64_t) + 1;	// we would need that to be ns->fb_len - 1, except we need to throw in the factor -1 into the FB. 
+	for (int i=0; i < ns->rels_needed; i++){
+		ns->relns[i].row = (uint64_t *)(calloc(ns->row_len, sizeof(uint64_t)));
+	}
+	ns->lp_bound = 1 << 18;
 	ht_init (ns);
 }
 
@@ -81,21 +90,31 @@ void factor (nsieve_t *ns){
 	poly_init (&curr_poly);
 
 	block_data_t sievedata;
-//	while (ns->nfull + ns->npartial < ns->rels_needed){
+	printf("Using k = %d; gvals range from %d to %d.\n", ns->k, gpool.gpool[0], gpool.gpool[gpool.ng-1]);
+//	return;
+	while (ns->nfull /*+ ns->npartial*/ < ns->rels_needed){
 		// while we don't have enough relations, sieve another poly group.
 		generate_polygroup (&gpool, &curr_polygroup, ns);
+		/*
 		printf("\nThe inverses of A (mod p) for each prime in the factor base: \n");
 		for (int i=0; i<ns->fb_len; i++){
 			printf("p = %d \tA^-1 = %d \tsqrt(n) mod p: %d\n", ns->fb[i], curr_polygroup.ainverses[i], ns->roots[i]);
 		}
+		*/
 		for (int i = 0; i < ns -> bvals; i ++){
 			generate_poly (&curr_poly, &curr_polygroup, ns, i);
 			poly_print (&curr_poly);
-			printf("\n");
-		//	sieve_poly (&sievedata, &curr_poly, ns);
+			sieve_poly (&sievedata, &curr_polygroup, &curr_poly, ns);
+			printf("We now have %d full relations and %d partials.\nSwitching polynomials..., M = %d\n", ns->nfull, ns->npartial, curr_poly.M);
+			mpz_t temp;
+			mpz_init(temp);
+			mpz_mul_ui(temp, ns->N, 2);
+			mpz_sqrt (temp, temp);
+			mpz_tdiv_q(temp, temp, curr_poly.a);
+			mpz_clear(temp);
 		}
-		return;
-//	}
+	}
+	return;
 	// now we have enough relations, so we build the matrix (combining the partials).
 	build_matrix (ns);	// this includes combining the partials (and cycle-finding if we do double large primes)
 

@@ -1,5 +1,5 @@
-CC=gcc
-CFLAGS= -g -pedantic -Wall -std=c99 -I./
+CC=clang
+CFLAGS= -g -O3 -pedantic -Wall -std=c99 -I./
 
 vpath %.h src/
 vpath %.c src/

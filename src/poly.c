@@ -72,7 +72,8 @@ void mpz_prevprime (mpz_t res){
 */
 
 // using minP = 10^6. Thank you to Mathematica for producing these values. 
-uint32_t q[] = {1000000, 1414, 182, 71, 44, 33, 28, 25, 24, 23, 23, 23};	// beyond k=12, q actually increases again! (this makes sense if you think about it enough)
+//uint32_t q[] = {1000000, 1414, 182, 71, 44, 33, 28, 25, 24, 23, 23, 23};	// beyond k=12, q actually increases again! (this makes sense if you think about it enough)
+uint32_t q[] = {25000, 224, 54, 30, 22, 19, 18, 18, 18, 18, 18, 19};	// these do much better for small inputs. However, 25000 polynomials may not be sufficient for some large factorizations, so we might have to select which table we want based on input number size.
 
 void gpool_init (poly_gpool_t *gp, nsieve_t *ns){
 	mpz_t aopt, temp, g;
@@ -227,6 +228,8 @@ void generate_polygroup (poly_gpool_t *gp, poly_group_t *pg, nsieve_t *ns){
 	mpz_inits (t1, t2, NULL);
 	int w = 0;
 	for (int z = 0; z < (1 << k); z++){	// the ith bit of z will control which root r_i_? is used for the current B computation.
+		if (w == 1 << (k-1)) break;	// then we've found enough, and we don't need to look at the rest. This is really mostly just
+						// a safegard for us to not keep setting pg->bvals[w] when w is out of range.
 		mpz_set_ui (pg->bvals[w], 0);	// clear the B-value
 		for (int i=0; i < k; i++){	// for each G-value
 			mpz_set_ui (t2, pg->gvals[i]);			// t2 = g_i
@@ -269,14 +272,23 @@ void generate_poly (poly_t *p, poly_group_t *pg, nsieve_t *ns, int i){
 	mpz_mul (p->c, p->b, p->b);	 // C = b^2
 	mpz_sub (p->c, p->c, ns->N);	 // C = b^2 - N
 	mpz_divexact (p->c, p->c, p->a); // C = (b^2 - N) / a
+	// compute optimal sieve bound
+	mpz_t temp;
+	mpz_init (temp);
+	mpz_mul_ui(temp, ns->N, 2);
+	mpz_sqrt(temp, temp);
+	mpz_tdiv_q(temp, temp, p->a);
+	p->M = mpz_get_ui(temp);
+	p->M = (p->M / BLOCKSIZE + 1) * BLOCKSIZE;
+	mpz_clear(temp);
 }
 
-void poly (mpz_t res, poly_t *p, uint32_t x){
+void poly (mpz_t res, poly_t *p, int32_t x){
 	// evaluate Ax^2 + 2Bx + C 
 	// = (((A * X) + 2B) * X) + C
-	mpz_mul_ui (res, p->a, x);	// res = ax
+	mpz_mul_si (res, p->a, x);	// res = ax
 	mpz_add    (res, res, p->b);	// res = ax + b
 	mpz_add    (res, res, p->b);	// res = ax + 2b
-	mpz_mul_ui (res, res, x);	// res = ax^2 + 2bx
+	mpz_mul_si (res, res, x);	// res = ax^2 + 2bx
 	mpz_add    (res, res, p->c);	// res = ax^2 + 2bx + c
 }
