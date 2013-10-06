@@ -52,6 +52,47 @@ void generate_fb (nsieve_t *ns){
 		ns->fb_logs[i] = fast_log (ns->fb[i]);
 	}
 }
+const int PARAM_FBBOUND = 1;
+const int PARAM_LPBOUND = 2;
+const int PARAM_M = 3;
+const int PARAM_T = 4;
+
+#define NPLEVELS  4	// number of entries in the params table
+#define  NPARAMS  5
+
+const double params[NPLEVELS][NPARAMS] =   { 	{100,  6000, 1 << 16, 1 * 32768, 1.3},
+						{120,  9000, 1 << 18, 2 * 32768, 1.3},
+						{140, 15000, 1 << 20, 2 * 32768, 1.3},
+					    	{160, 25000, 1 << 21, 4 * 32768, 1.3}
+					   };
+
+void set_params (nsieve_t *ns, int p1, int p2, double fac){
+	ns -> fb_bound = (uint32_t) (params[p1][PARAM_FBBOUND] * fac + params[p2][PARAM_FBBOUND] * (1 - fac));
+	ns -> lp_bound = (uint32_t) (params[p1][PARAM_LPBOUND] * fac + params[p2][PARAM_LPBOUND] * (1 - fac));
+	ns -> M        = (uint32_t) (params[p1][PARAM_M] * fac + params[p2][PARAM_M] * (1 - fac));
+	ns -> T        = (float)    (params[p1][PARAM_T] * fac + params[p2][PARAM_T] * (1 - fac));
+	printf("Selected parameters: \n\tfb_bound = %d \n\tlp_bound = %d \n\tM = %d\n\tT - %f\n", ns->fb_bound, ns->lp_bound, ns->M, ns->T);
+}
+
+void select_parameters (nsieve_t *ns){
+	int bits = mpz_sizeinbase (ns->N, 2);
+	printf("Choosing parameters for %d bit number... \n", bits);
+	if (bits <= params[0][0]){
+		set_params(ns, 0, 0, 0);
+	} else if (bits >= params[NPLEVELS-1][0]){
+		set_params(ns, NPLEVELS - 1, NPLEVELS - 1, 0);
+	} else {
+		int i = 0;
+		while (i < NPLEVELS && params[i][0] < bits){
+			i++;
+		}
+		set_params (ns, i, i-1, (bits - params[i-1][0]) / (params[i][0] - params[i-1][0]));
+	}
+}
+
+void select_multiplier (nsieve_t *ns){
+}
+	
 
 /* Initialization and selection of the parameters for the factorization. This will fill allocate space for and initialize all of the 
  * fields in the nsieve_t. Notably, it will generate the factor base, compute the square roots, and allocate space for the matrix and partials. 
@@ -59,14 +100,13 @@ void generate_fb (nsieve_t *ns){
 void nsieve_init (nsieve_t *ns, mpz_t n){
 	// all of the parameters here are complete BS for now.
 	mpz_init_set (ns->N, n);
-	ns->k = 3;
-	ns->bvals = 1 << (ns->k - 1);
-	ns->M = 3 * BLOCKSIZE;	
-	ns->fb_bound = 15000;
-	ns->extra_rels = 48;
+
+	select_parameters (ns);
+	select_multiplier (ns);
 
 	ns->nfull = 0;
 	ns->npartial = 0;
+	ns->extra_rels = 48;
 
 	generate_fb (ns);
 
@@ -75,7 +115,7 @@ void nsieve_init (nsieve_t *ns, mpz_t n){
 	for (int i=0; i < ns->rels_needed; i++){
 		ns->relns[i].row = (uint64_t *)(calloc(ns->row_len, sizeof(uint64_t)));
 	}
-	ns->lp_bound = 1 << 18;
+
 	ht_init (ns);
 }
 
@@ -95,6 +135,7 @@ void factor (nsieve_t *ns){
 	while (ns->nfull /*+ ns->npartial*/ < ns->rels_needed){
 		// while we don't have enough relations, sieve another poly group.
 		generate_polygroup (&gpool, &curr_polygroup, ns);
+		printf("Starting new polygroup. We have %d full and %d partial relations\n.", ns->nfull, ns->npartial);
 		/*
 		printf("\nThe inverses of A (mod p) for each prime in the factor base: \n");
 		for (int i=0; i<ns->fb_len; i++){
@@ -103,9 +144,10 @@ void factor (nsieve_t *ns){
 		*/
 		for (int i = 0; i < ns -> bvals; i ++){
 			generate_poly (&curr_poly, &curr_polygroup, ns, i);
+			printf("\t");
 			poly_print (&curr_poly);
 			sieve_poly (&sievedata, &curr_polygroup, &curr_poly, ns);
-			printf("We now have %d full relations and %d partials.\nSwitching polynomials..., M = %d\n", ns->nfull, ns->npartial, curr_poly.M);
+//			printf("We now have %d full relations and %d partials.\nSwitching polynomials..., M = %d\n", ns->nfull, ns->npartial, curr_poly.M);
 			mpz_t temp;
 			mpz_init(temp);
 			mpz_mul_ui(temp, ns->N, 2);

@@ -5,22 +5,28 @@
 // important note: the matrix positions are like this: [63, 62, ... 1, 0][127, 126, ... 65, 64] etc.
 // This is so that position p can be found in block p/64 at bit (1 << p % 64).
 
-void clear_row (matrel_t *m, nsieve_t *ns){
+void clear_row (uint64_t *m, nsieve_t *ns){
 	for (int i=0; i < ns->row_len; i++){
-		m->row[i] = 0;
+		m[i] = 0;
 	}
 }
 
-int get_bit (matrel_t *m, int pos){
+int get_bit (uint64_t *m, int pos){
 	int block = pos/64;
 	uint64_t mask = 1 << (pos % 64);
-	return (m->row[block] & mask) > 0 ? 1 : 0;
+	return (m[block] & mask) > 0 ? 1 : 0;
 }
 
-void flip_bit (matrel_t *m, int pos){
+void flip_bit (uint64_t *m, int pos){
 	int block = pos/64;
 	uint64_t mask = 1 << (pos % 64);
-	m->row[block] = m->row[block] ^ mask;
+	m[block] = m[block] ^ mask;
+}
+
+void xor_row (uint64_t *res, uint64_t *op, int len){
+	for (int i=0; i<len; i++){
+		res[i] = res[i] ^ op[i];
+	}
 }
 
 /* Hashtable functions */
@@ -34,7 +40,7 @@ uint32_t hash_partial (uint32_t cofactor){	// hashes the cofactor of a partial r
 	return (cofactor * 263633281) + 135666227;	// random primes.
 }
 
-/* Something to think about: do we want to keep the lists sorted? This might be a good idea, esp. since they will be relatively short. */
+/* We want to keep the lists sorted. This makes the counting much easier, and is not much extra trouble or computational expense */
 void ht_add (hashtable_t *ht, rel_t *rel){	// add rel to the hashtable
 	uint32_t slot = hash_partial (rel->cofactor) % ht->nbuckets;
 	if (ht->buckets[slot] == NULL){
@@ -44,10 +50,44 @@ void ht_add (hashtable_t *ht, rel_t *rel){	// add rel to the hashtable
 	}
 	// this is a work in progress
 	ht_entry_t *rover = ht->buckets[slot];
+	ht_entry_t *trailer = rover;
+	while (rover != NULL && rel->cofactor < rover->rel->cofactor){
+		trailer = rover;
+		rover = rover->next;
+	}
+	// we want to insert right after trailer and before rover.
+	ht_entry_t *newentry = (ht_entry_t *) malloc (sizeof(ht_entry_t));
+	newentry -> rel = rel;
+	newentry -> next = rover;	// this even works if rover is NULL (we are appending to the list)
+	trailer->next = newentry;
+}
+
+uint32_t ht_count_bucket (ht_entry_t *h){
+	if (h == NULL) return 0;
+	uint32_t res = 0;
+	uint32_t ct = 0;
+	uint32_t curr_cofactor = h->rel->cofactor;
+	while (1){
+		while (h != NULL && h->rel->cofactor == curr_cofactor){
+			ct ++;
+			h = h->next;
+		}
+		res += ct - 1;
+		if (h == NULL){
+			return res;
+		}
+		curr_cofactor = h->rel->cofactor;
+		ct = 0;
+	}
+	return 0;	// this should never happen.
 }
 
 uint32_t ht_count (hashtable_t *ht){		// counts the number of full relations that can be made from the partials in the hashtable.
-	return 0;
+	uint32_t res = 0;
+	for (int i=0; i < ht->nbuckets; i++){
+		res += ht_count_bucket (ht->buckets[i]);
+	}
+	return res;
 }
 
 /* Generic auxillary functions */ 

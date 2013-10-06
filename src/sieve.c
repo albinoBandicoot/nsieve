@@ -6,9 +6,48 @@ void sieve_poly (block_data_t *data, poly_group_t *pg, poly_t *p, nsieve_t *ns){
 		sieve_block (data, pg, p, ns, -p->M + i * BLOCKSIZE);
 		if (ns->nfull >= ns->rels_needed) return;
 	}
+	// now we get to pick our victim. It must be a full relation (though I guess theoretically if there were no fulls but two
+	// partials from this poly group shared a cofactor it could be used, but that's more thinking and debugging than it's worth)
+	// Theoretically, it would probably be best to pick the sparsest relation as the victim, but we'll just pick the first one.
+	for (int i=0; i < pg->nrels; i++){
+		if (pg -> relns[i]->cofactor == 1){
+			pg->victim = pg->relns[i];
+			break;
+		}
+	}
+	if (pg->victim != NULL){	// we found a full relation
+		// factor victim over the fb:
+		mpz_t temp;
+		mpz_init (temp);
+		poly (temp, pg->victim->poly, pg->victim->x);
+		fb_factor (temp, pg->victim_factors, ns);
+		free (temp);
+		// now we will loop through the relations. For each full relation, we construct a matrel_t for it, and fill in the 
+		// row (multiplying (xor-ing) by the victim). The partials will have this done to them whenever they are added to
+		// the matrix at the end of sieving. 
+		for (int i=0; i < pg->nrels; i++){
+			if (pg->relns[i]->cofactor == 1){	// full relation
+				matrel_t *m = &ns->relns[ns->nfull];
+				m -> r1 = pg->relns[i];
+				m -> r2 = NULL;
+				fb_factor_rel (m->r1, m->row, ns);
+				xor_row (m->row, pg->victim_factors, ns->row_len);
+			}
+		}
+	} else {
+		// we did not find one. This is not good, but not an error either - we were just unlucky. However, we should probably be
+		// doing either larger sieve intervals or a larger k or something. 
+		printf("There are no full relations for this polygroup! We must throw away the partials.\n");
+	}
+			
+	
+	
 }
 
 uint8_t fast_log (uint32_t x){	// very rough aprox. to log_2 (x)
+	x = (x*3)/2;		// we do this so that some of the logs of the primes are too high and some are too low. If we left x as is, 
+				// they would be consistently too low, and the errors would accumulate, proportionally to the number of factors found.
+				// The idea is that the errors will now be essentially random.
 	uint8_t res = 0;
 	while (x > 0){
 		x = x >> 1;
@@ -25,7 +64,7 @@ void mpz_sub_si (mpz_t res, mpz_t a, int32_t x){
 	}
 }
 
-#define CHECK		// define this to check to make sure p | Q(x) when it should.
+//#define CHECK		// define this to check to make sure p | Q(x) when it should. It slows things down a LOT, and should only be used for debugging.
 /* This is the real heart of the Quadratic Sieve. */
 void sieve_block (block_data_t *data, poly_group_t *pg, poly_t *q, nsieve_t *ns, int block_start){
 	memset (data->sieve, 0, sizeof(uint16_t) * BLOCKSIZE);	// clear the sieve
@@ -102,7 +141,7 @@ void extract_relations (block_data_t *data, poly_group_t *pg, poly_t *p, nsieve_
 	 * let F = log(fb[fb_len-1]), and if F < r < F^2, then the remaining factor is prime, and we have a partial.
 	 */
 //	int cutoff = (int) (fast_log(ns->fb_bound) * 1.4);	// for now, this is very ad hoc	
-	int cutoff = (int) (fast_log(ns->lp_bound) * 1.4);
+	int cutoff = (int) (fast_log(ns->lp_bound) * ns->T);
 	mpz_t temp;
 	mpz_init(temp);
 	poly(temp, p, block_start + BLOCKSIZE/2);
@@ -127,62 +166,66 @@ void extract_relations (block_data_t *data, poly_group_t *pg, poly_t *p, nsieve_
 	}
 }
 
-/* Allocates the rel_t and matrel_t objects, and adds the matrel_t to the list of full relations.
- * Performs the trial division, producing the row of the matrix. It may be revealed by doing this that
- * the relation in fact does not factor over the factor base. If it is a partial, it is instead added
- * to the hashtable.
+int fb_factor_rel (rel_t *rel, uint64_t *row, nsieve_t *ns){
+	mpz_t x;
+	mpz_init (x);
+	poly (x, rel->poly, rel->x);
+	mpz_divexact_ui(x, x, rel->cofactor);
+	int rval = fb_factor (x, row, ns);
+	mpz_clear (x);
+	return rval;
+}
+
+int fb_factor (mpz_t x, uint64_t *row, nsieve_t *ns){	// returns 0 if factors completely. At the end, x contains the unfactored portion.
+	clear_row (row, ns);
+	if (mpz_cmp_ui(x, 0) < 0){
+		mpz_neg (x,x);
+		flip_bit (row, 0);
+	}
+	for (int i=0; i < ns->fb_len; i++){
+		while (mpz_divisible_ui_p(x, ns->fb[i])){
+			mpz_divexact_ui(x, x, ns->fb[i]);
+			flip_bit (row, i+1);
+			if (mpz_cmp_ui(x, 1) == 0){
+				return 0;
+			}
+		}
+	}
+	return -1;
+}
+
+
+/* Allocates the rel_t object, and adds it to the list in the polygroup if it factored or was a partial.
+ * The trial division here is solely to determine if it actually factors; it does not fill in the matrix rows.
 */
 void construct_relation (mpz_t qx, int32_t x, poly_t *p, nsieve_t *ns){
 	rel_t *rel = (rel_t *)(malloc(sizeof(rel_t)));
 	rel->poly = p;
 	rel->x = x;
-	clear_row (&ns->relns[ns->nfull], ns);
-	if (mpz_cmp_ui(qx, 0) < 0){
-		mpz_abs(qx, qx);
-		flip_bit (&ns->relns[ns->nfull], 0);
-	}
-#ifdef FULL_TDIV
-	long t = 2;
-	while (t < ns->fb_bound){
-		while (mpz_divisible_ui_p(qx, t)){
-			mpz_divexact_ui(qx, qx, t);
-		}
-		if (t == 2){
-			t ++;
-		} else {
-			t += 2;
-		}
-		if (mpz_cmp_ui(qx, 1) == 0){
-			break;
-		}
-	}
-#endif
-#ifndef FULL_TDIV
+	mpz_abs(qx, qx);
 	for (int i=0; i < ns->fb_len; i++){
 		while (mpz_divisible_ui_p (qx, ns->fb[i])){
 			mpz_divexact_ui(qx, qx, ns->fb[i]);
-			flip_bit (&ns->relns[ns->nfull], i+1);
-		}
-		if (mpz_cmp_ui(qx, 1) == 0){
-			break;
+			if (mpz_cmp_ui(qx, 1) == 0){
+				break;
+			}
 		}
 	}
-#endif 
 	if (mpz_cmp_ui(qx, 1) == 0){
-		printf("Found full relation; x = %d\n", x);
-		ns->relns[ns->nfull].r1 = rel;
-		ns->relns[ns->nfull].r2 = NULL;
-		rel->cofactor = 1;
-		ns->nfull ++;
+//		printf("Found full relation; x = %d\n", x);
+		if (p->group->nrels < PG_REL_STORAGE){
+			p->group->relns[ p->group->nrels ++ ] = rel;
+			return;
+		}
 	} else {
 		if (mpz_cmp_ui(qx, ns->lp_bound) < 0){
 			if (mpz_probab_prime_p(qx, 10)){	// if lp_bound < fb_bound^2, this primality test could be omitted.
-				ns->npartial++;
-	//			printf("Found partial relation; x = %d, cofactor = %ld\n", x, mpz_get_ui(qx));
-
-	//			rel->cofactor = mpz_get_ui(qx);
-	//			ht_add (&ns->partials, rel);
-	//			return;
+				rel->cofactor = mpz_get_ui(qx);
+				if (p->group->nrels < PG_REL_STORAGE){
+					p->group->relns[ p->group->nrels ++ ] = rel;
+					return;
+				}
+		//		ht_add (&ns->partials, rel);
 			}
 		}
 	}

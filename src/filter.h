@@ -2,6 +2,7 @@
 #define FILTER_H
 
 #include "common.h"
+#include "sieve.h"
 
 /* This section of the program will do the matrix building and filtering */
 

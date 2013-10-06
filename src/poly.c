@@ -4,6 +4,10 @@ void polygroup_init (poly_group_t *pg, nsieve_t *ns){
 	mpz_init (pg->a);
 	pg->ainverses = (uint32_t *) malloc(ns->fb_len * sizeof(uint32_t));
 	pg->bvals = (mpz_t *) malloc( ns->bvals * sizeof (mpz_t));
+	pg->relns = (rel_t **) calloc (PG_REL_STORAGE, sizeof (rel_t *));
+	pg->nrels = 0;
+	pg->victim = NULL;
+	pg->victim_factors = (uint64_t *) calloc (ns->row_len, sizeof(uint64_t));
 	for (int i=0; i < ns->bvals; i++){
 		mpz_init (pg->bvals[i]);
 	}
@@ -12,6 +16,7 @@ void polygroup_init (poly_group_t *pg, nsieve_t *ns){
 void polygroup_free (poly_group_t *pg, nsieve_t *ns){
 	mpz_clear (pg->a);
 	free (pg->ainverses);
+	free (pg->relns);
 	for (int i=0; i < ns->bvals; i++){
 		mpz_clear (pg->bvals[i]);
 	}
@@ -266,6 +271,8 @@ void generate_polygroup (poly_gpool_t *gp, poly_group_t *pg, nsieve_t *ns){
 }
 
 void generate_poly (poly_t *p, poly_group_t *pg, nsieve_t *ns, int i){
+	p->group = pg;
+
 	mpz_set(p->a, pg->a);
 	mpz_set (p->b, pg->bvals[i]);
 	// compute C = (b^2 - n) / a

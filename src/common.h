@@ -12,7 +12,23 @@
 #define KMAX 12
 #define BLOCKSIZE 16384
 
+struct relation;	// this is going to be a rel_t.
+
 typedef struct {
+	mpz_t a;
+	mpz_t *bvals;
+	uint32_t gvals[KMAX];
+	uint32_t *ainverses;	// the values of a^-1 (mod p) for each p in the factor base. This stays the same for the whole group.
+
+	struct relation *victim;
+	uint64_t *victim_factors;
+	uint32_t nrels;
+	struct relation **relns;	// we store the relations we've collected for this poly group here. This facilitates keeping track of which
+				// rels we need to multiply by what, and also will make multithreading easier if we ever decide to do it.
+} poly_group_t;
+
+typedef struct {
+	poly_group_t *group;
 	mpz_t a;
 	mpz_t b;
 	mpz_t c;
@@ -42,7 +58,7 @@ typedef struct {
 	uint32_t *frogs;	// the last used set of g values. A call to advance_gpool will get the next set of values. 
 } poly_gpool_t;
 
-typedef struct {	// represents a relation, poly(x) = 
+typedef struct relation {
 	poly_t  *poly;
 	uint32_t  x;
 	uint32_t cofactor;
@@ -69,6 +85,7 @@ typedef struct {
 	unsigned char k;	// the number of distinct prime squares to use to construct polynomial 'A' values
 	unsigned short bvals;	// the number of distinct values for 'B' - given by 2^(k-1).
 	unsigned int  M;	// the sieve length. 
+	float T;		// The sieve threshold will be T * log(lp_bound).
 
 	unsigned int  fb_bound;	// upper bound for the primes in the factor base
 	unsigned int  fb_len;	// number of primes in the factor base
@@ -90,9 +107,10 @@ typedef struct {
 } nsieve_t;
 
 /* Matrix row get/set */
-void clear_row (matrel_t *, nsieve_t *);
-void flip_bit (matrel_t *, int);
-int  get_bit  (matrel_t *, int);
+void clear_row (uint64_t *, nsieve_t *);
+void flip_bit (uint64_t *, int);
+int  get_bit  (uint64_t *, int);
+void xor_row  (uint64_t *res, uint64_t *op, int len);
 
 /* Hashtable functions */
 
