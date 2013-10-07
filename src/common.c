@@ -29,6 +29,19 @@ void xor_row (uint64_t *res, uint64_t *op, int len){
 	}
 }
 
+int rightmost_1 (uint64_t *m, int max_i){
+	for (int i = max_i; i >= 0; i--){
+		if (get_bit(m, i) == 1)	return i;
+	}
+	return -1;
+}
+
+int is_zero_vec (uint64_t *m, int len){
+	for (int i=0; i<len; i++){
+		if (m[i] != 0) return 0;
+	}
+	return 1;
+}
 /* Hashtable functions */
 
 void ht_init (nsieve_t *ns){			// allocates space for and initializes the hashtable stored in the nsieve_t.

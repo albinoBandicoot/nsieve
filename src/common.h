@@ -111,6 +111,8 @@ void clear_row (uint64_t *, nsieve_t *);
 void flip_bit (uint64_t *, int);
 int  get_bit  (uint64_t *, int);
 void xor_row  (uint64_t *res, uint64_t *op, int len);
+int  rightmost_1 (uint64_t *, int max_i);
+int  is_zero_vec (uint64_t *, int len);
 
 /* Hashtable functions */
 

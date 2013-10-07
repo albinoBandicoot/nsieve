@@ -1,7 +1,43 @@
 #include "matrix.h"
 
+/* The Gaussian Elimination code is modeled on a post on Programming Praxis. It proceeds basically as follows:
+ *
+ * Construct a square history matrix, with dimension equal to the # of rows in the exponent matrix. Initialize it
+ * to the identity matrix. This records which exponent vectors have been combined together. Now:
+ *
+ * for each column in the matrix, working right to left:
+ * 	find the 'pivot' vector closest to the top with rightmost 1 in the current column. If none exists, go to the next column.
+ * 		for each other vector (Yolanda) with rightmost 1 in the current column:
+ * 			Yolanda = Yolanda XOR pivot	(for both the exponent and history matricies)
+ *
+ * Any zero row-vectors in the exponent matrix represent dependencies that can be converted into a congruence of squares. 
+*/
+
 void solve_matrix (nsieve_t *ns){
-}
+	const int hmlen = (ns->rels_needed -1)/64 + 1;
+	const int hmsize = ns->rels_needed;
+	uint64_t *history[hmsize];
+	uint32_t rmos[hmsize];	// for keeping track of the position of the rightmost 1 in each exponent vector.
+	for (int i=0; i < hmsize; i++){
+		history[i] = (uint64_t *) calloc (hmlen, sizeof(uint64_t));
+		flip_bit (history[i], i);
+		rmos[i] = rightmost_1 (ns->relns[i].row, ns->fb_len + 1);
+	}
+	const int expm_rows = ns->rels_needed;
+	const int expm_cols = ns->fb_len + 1;
+	for (int col = expm_cols-1; col >= 0; col --){	// col starts at fb_len because there are fb_len + 1 columns in the matrix.
+		int pivot = 0;
+		while (pivot < expm_rows && rmos[pivot] != col){
+			pivot ++;
+		}
+		for (int yolanda = pivot + 1; yolanda < expm_rows; yolanda++){
+			if (rmos[yolanda] == col){
+				xor_row (ns->relns[yolanda].row, ns->relns[pivot].row, ns->row_len);
+				xor_row (history[yolanda], history[pivot], hmlen);
+				rmos[yolanda] = rightmost_1 (ns->relns[yolanda].row, expm_cols);	// update the cached value of the rightmost 1.
+			}
+		}
+	}
 
 /* Factor deduction and dealing with multiple polynomials, etc.
  *
@@ -37,5 +73,65 @@ void solve_matrix (nsieve_t *ns){
  * This is our desired congruence of squres. 
 */
 
-void deduce_factors (nsieve_t *ns /* and history matrix */){
+	mpz_t ncopy, temp, temp2;
+	mpz_init_set (ncopy, ns->N);
+	mpz_inits (temp, temp2, NULL);
+	for (int row = 0; row < expm_rows; row ++){
+		if (is_zero_vec (ns->relns[row].row, ns->row_len)){
+			// yay! we have a dependency. Now the ugly math begins.
+			mpz_t lhs, rhs;	// we will end up with lhs^2 ~= rhs^2 (mod N)
+					// the left hand side is the H_p,i and the right side is the y_p,i.
+			mpz_inits (lhs, rhs, NULL);
+			mpz_set_ui(lhs, 1);
+			mpz_set_ui(rhs, 1);
+			for (int relnum = 0; relnum < hmsize; relnum ++){
+				if (get_bit (history[row], relnum) == 1){	// the relation numbered 'relnum' is included in the dependency
+					matrel_t *m = &ns->relns[relnum];
+
+					// lhs = lhs * victimH * mH;  if victim poly = p and m poly = q, this is (p.a*victim.x + p.b) * (q.a*m.x + q.b)
+					rel_t *victim = m->r1->poly->group->victim;
+					mpz_set_ui (temp, victim->x);
+					mpz_mul (temp, temp, victim->poly->a);
+					mpz_add (temp, temp, victim->poly->b);	// temp = p.a * victim.x + p.b = victim H
+					mpz_mul (lhs, lhs, temp);		// multiply it into the LHS
+
+					mpz_set_ui (temp, m->r1->x);
+					mpz_mul (temp, temp, m->r1->poly->a);
+					mpz_add (temp, temp, m->r1->poly->b);	// temp = q.a * m.x + q.b  = mH
+					mpz_mul (lhs, lhs, temp);		// multiply into LHS
+
+					mpz_mod (lhs, lhs, ns->N);		// reduce mod N to keep sizes small
+
+					// now update RHS
+					// rhs = rhs * p(victim.x) * q(m.x)
+					poly (temp, victim->poly, victim->x);
+					mpz_mul (rhs, rhs, temp);
+
+					poly (temp, m->r1->poly, m->r1->x);
+					mpz_mul (rhs, rhs, temp);
+					// we can't reduce rhs mod N, since we have to take the sqrt of its final value in the integers, not Z/nZ.
+
+					if (m->r2 != NULL){	// then this is a partial and we have more work to do.
+					}
+
+				}
+			}
+			// ok, now we have lhs^2 ~= rhs (mod N). rhs should be a square if all went well, so we shall take its sqrt to get
+			// 	lhs^2 ~= v^2 (mod N)
+			mpz_sqrt (rhs, rhs);
+			mpz_sub (temp, rhs, lhs);
+			mpz_gcd (temp, temp, ns->N);
+			if (mpz_cmp_ui (temp, 1) > 0){
+				if (mpz_cmp (temp, ns->N) != 0){	// then it's a nontrivial factor!!!
+					mpz_out_str (stdout, 10, temp);
+					if (mpz_probab_prime_p (temp, 10)){
+						printf (" (prp)\n");
+					} else {
+						printf (" (c)\n");
+					}
+				}
+			}
+		}
+	}
+
 }
