@@ -117,17 +117,21 @@ void solve_matrix (nsieve_t *ns){
 
 					// lhs = lhs * victimH * mH;  if victim poly = p and m poly = q, this is (p.a*victim.x + p.b) * (q.a*m.x + q.b)
 					rel_t *victim = m->r1->poly->group->victim;
-					mpz_set_ui (temp, victim->x);
+					mpz_set_si (temp, victim->x);
 					mpz_mul (temp, temp, victim->poly->a);
 					mpz_add (temp, temp, victim->poly->b);	// temp = p.a * victim.x + p.b = victim H
 					mpz_mul (lhs, lhs, temp);		// multiply it into the LHS
 
-					mpz_set_ui (temp, m->r1->x);
+					mpz_set_si (temp, m->r1->x);
 					mpz_mul (temp, temp, m->r1->poly->a);
 					mpz_add (temp, temp, m->r1->poly->b);	// temp = q.a * m.x + q.b  = mH
 					mpz_mul (lhs, lhs, temp);		// multiply into LHS
 
-					mpz_mod (lhs, lhs, ns->N);		// reduce mod N to keep sizes small
+					// this is a little bit of a shot in the dark.
+					mpz_invert (temp, victim->poly->a, ns->N);
+					mpz_mul (lhs, lhs, temp);
+
+//					mpz_mod (lhs, lhs, ns->N);		// reduce mod N to keep sizes small
 
 					// now update RHS
 					// rhs = rhs * p(victim.x) * q(m.x)
@@ -154,6 +158,7 @@ void solve_matrix (nsieve_t *ns){
 			mpz_sqrt (rhs, rhs);
 			mpz_sub (temp, rhs, lhs);
 			mpz_gcd (temp, temp, ns->N);
+			mpz_abs (temp, temp);	// probably unneceesary
 			if (mpz_cmp_ui (temp, 1) > 0){
 				if (mpz_cmp (temp, ns->N) != 0){	// then it's a nontrivial factor!!!
 					mpz_out_str (stdout, 10, temp);
