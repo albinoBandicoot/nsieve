@@ -60,8 +60,8 @@ const int PARAM_T = 4;
 #define NPLEVELS  4	// number of entries in the params table
 #define  NPARAMS  5
 
-const double params[NPLEVELS][NPARAMS] =   { 	{100,  6000, 1 << 16, 1 * 32768, 1.3},
-						{120,  9000, 1 << 18, 2 * 32768, 1.3},
+const double params[NPLEVELS][NPARAMS] =   { 	{100,  1000, 1 << 16, 1 * 32768, 1.3},
+						{120,  1000, 1 << 18, 2 * 32768, 1.3},
 						{140, 15000, 1 << 20, 2 * 32768, 1.3},
 					    	{160, 25000, 1 << 21, 4 * 32768, 1.3}
 					   };
@@ -111,7 +111,9 @@ void nsieve_init (nsieve_t *ns, mpz_t n){
 	generate_fb (ns);
 
 	ns->relns = (matrel_t *)(malloc((ns->fb_len + ns->extra_rels) * sizeof(matrel_t)));
-	ns->row_len = (ns->fb_len)/sizeof(uint64_t) + 1;	// we would need that to be ns->fb_len - 1, except we need to throw in the factor -1 into the FB. 
+	ns->row_len = (ns->fb_len)/(8*sizeof(uint64_t)) + 1;	// we would need that to be ns->fb_len - 1, except we need to throw in the factor -1 into the FB. 
+
+	printf("There are %d primes in the factor base, so we will search for %d relations. The matrix rows will have %d 8-byte chunks in them.\n", ns->fb_len, ns->rels_needed, ns->row_len);
 	for (int i=0; i < ns->rels_needed; i++){
 		ns->relns[i].row = (uint64_t *)(calloc(ns->row_len, sizeof(uint64_t)));
 	}
@@ -124,44 +126,33 @@ void factor (nsieve_t *ns){
 	poly_gpool_t gpool;
 	gpool_init (&gpool, ns);
 
-	poly_group_t curr_polygroup;
-	poly_t curr_poly;
-	polygroup_init (&curr_polygroup, ns);
-	poly_init (&curr_poly);
 
 	block_data_t sievedata;
 	printf("Using k = %d; gvals range from %d to %d.\n", ns->k, gpool.gpool[0], gpool.gpool[gpool.ng-1]);
 //	return;
 	while (ns->nfull /*+ ns->npartial*/ < ns->rels_needed){
 		// while we don't have enough relations, sieve another poly group.
-		generate_polygroup (&gpool, &curr_polygroup, ns);
+		poly_group_t *curr_polygroup = (poly_group_t *) malloc(sizeof(poly_group_t));
+		polygroup_init (curr_polygroup, ns);
+		generate_polygroup (&gpool, curr_polygroup, ns);
 		printf("Starting new polygroup. We have %d full and %d partial relations\n.", ns->nfull, ns->npartial);
-		/*
-		printf("\nThe inverses of A (mod p) for each prime in the factor base: \n");
-		for (int i=0; i<ns->fb_len; i++){
-			printf("p = %d \tA^-1 = %d \tsqrt(n) mod p: %d\n", ns->fb[i], curr_polygroup.ainverses[i], ns->roots[i]);
-		}
-		*/
 		for (int i = 0; i < ns -> bvals; i ++){
-			generate_poly (&curr_poly, &curr_polygroup, ns, i);
+			poly_t *curr_poly = (poly_t *) malloc (sizeof (poly_t));
+			poly_init (curr_poly);
+			generate_poly (curr_poly, curr_polygroup, ns, i);
+
 			printf("\t");
-			poly_print (&curr_poly);
-			sieve_poly (&sievedata, &curr_polygroup, &curr_poly, ns);
+			poly_print (curr_poly);
+
+			sieve_poly (&sievedata, curr_polygroup, curr_poly, ns);
 //			printf("We now have %d full relations and %d partials.\nSwitching polynomials..., M = %d\n", ns->nfull, ns->npartial, curr_poly.M);
-			mpz_t temp;
-			mpz_init(temp);
-			mpz_mul_ui(temp, ns->N, 2);
-			mpz_sqrt (temp, temp);
-			mpz_tdiv_q(temp, temp, curr_poly.a);
-			mpz_clear(temp);
 		}
+		add_polygroup_relations (curr_polygroup, ns);
 	}
-	return;
 	// now we have enough relations, so we build the matrix (combining the partials).
-	build_matrix (ns);	// this includes combining the partials (and cycle-finding if we do double large primes)
 
 	// Filter the matrix to reduce its size without reducing its yummy content. This will accelerate the matrix solving step, and also reduce the memory usage.
-	filter (ns);
+//	filter (ns);
 	
 	// now we solve the matricies. The rest of the guts are in matrix.c, in the function solve_matrix.
 	solve_matrix (ns);

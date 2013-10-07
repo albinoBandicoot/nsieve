@@ -4,34 +4,45 @@
 void sieve_poly (block_data_t *data, poly_group_t *pg, poly_t *p, nsieve_t *ns){
 	for (int i=0; i < 2*p->M/BLOCKSIZE; i++){
 		sieve_block (data, pg, p, ns, -p->M + i * BLOCKSIZE);
-		if (ns->nfull >= ns->rels_needed) return;
 	}
+}
+
+
+/* This gets called after all of the polynomials in a block have been sieved to collect the relations together, and do the multiplying
+ * through by the victim. */
+
+void add_polygroup_relations (poly_group_t *pg, nsieve_t *ns){
 	// now we get to pick our victim. It must be a full relation (though I guess theoretically if there were no fulls but two
 	// partials from this poly group shared a cofactor it could be used, but that's more thinking and debugging than it's worth)
 	// Theoretically, it would probably be best to pick the sparsest relation as the victim, but we'll just pick the first one.
 	for (int i=0; i < pg->nrels; i++){
+		printf("Looking at i = %d; cofactor = %d\n", i, pg->relns[i]->cofactor);
 		if (pg -> relns[i]->cofactor == 1){
 			pg->victim = pg->relns[i];
 			break;
 		}
 	}
+
 	if (pg->victim != NULL){	// we found a full relation
 		// factor victim over the fb:
 		mpz_t temp;
 		mpz_init (temp);
 		poly (temp, pg->victim->poly, pg->victim->x);
 		fb_factor (temp, pg->victim_factors, ns);
-		free (temp);
+		mpz_clear (temp);
 		// now we will loop through the relations. For each full relation, we construct a matrel_t for it, and fill in the 
 		// row (multiplying (xor-ing) by the victim). The partials will have this done to them whenever they are added to
 		// the matrix at the end of sieving. 
 		for (int i=0; i < pg->nrels; i++){
+			if (ns->nfull >= ns->rels_needed) return;	// we're done sieving.
+			if (pg->relns[i] == pg->victim) continue;	// we don't want to add the victim to the list.
 			if (pg->relns[i]->cofactor == 1){	// full relation
 				matrel_t *m = &ns->relns[ns->nfull];
 				m -> r1 = pg->relns[i];
 				m -> r2 = NULL;
 				fb_factor_rel (m->r1, m->row, ns);
 				xor_row (m->row, pg->victim_factors, ns->row_len);
+				ns->nfull ++;
 			}
 		}
 	} else {
@@ -39,15 +50,13 @@ void sieve_poly (block_data_t *data, poly_group_t *pg, poly_t *p, nsieve_t *ns){
 		// doing either larger sieve intervals or a larger k or something. 
 		printf("There are no full relations for this polygroup! We must throw away the partials.\n");
 	}
-			
-	
-	
 }
 
 uint8_t fast_log (uint32_t x){	// very rough aprox. to log_2 (x)
 	x = (x*3)/2;		// we do this so that some of the logs of the primes are too high and some are too low. If we left x as is, 
 				// they would be consistently too low, and the errors would accumulate, proportionally to the number of factors found.
-				// The idea is that the errors will now be essentially random.
+				// The idea is that the errors will now be essentially random, and average to roughly 0. 
+				// We are using 3/2 ~= sqrt(2).
 	uint8_t res = 0;
 	while (x > 0){
 		x = x >> 1;
@@ -170,7 +179,7 @@ int fb_factor_rel (rel_t *rel, uint64_t *row, nsieve_t *ns){
 	mpz_t x;
 	mpz_init (x);
 	poly (x, rel->poly, rel->x);
-	mpz_divexact_ui(x, x, rel->cofactor);
+//	mpz_divexact_ui(x, x, rel->cofactor);
 	int rval = fb_factor (x, row, ns);
 	mpz_clear (x);
 	return rval;
@@ -212,19 +221,23 @@ void construct_relation (mpz_t qx, int32_t x, poly_t *p, nsieve_t *ns){
 		}
 	}
 	if (mpz_cmp_ui(qx, 1) == 0){
-//		printf("Found full relation; x = %d\n", x);
 		if (p->group->nrels < PG_REL_STORAGE){
-			p->group->relns[ p->group->nrels ++ ] = rel;
+//			printf("Adding full relation; x = %d to position %d\n", x, p->group->nrels);
+			rel->cofactor = 1;
+			p->group->relns[ p->group->nrels ] = rel;
+			p->group->nrels ++;
 			return;
 		}
 	} else {
 		if (mpz_cmp_ui(qx, ns->lp_bound) < 0){
 			if (mpz_probab_prime_p(qx, 10)){	// if lp_bound < fb_bound^2, this primality test could be omitted.
+				/*
 				rel->cofactor = mpz_get_ui(qx);
 				if (p->group->nrels < PG_REL_STORAGE){
 					p->group->relns[ p->group->nrels ++ ] = rel;
 					return;
 				}
+				*/
 		//		ht_add (&ns->partials, rel);
 			}
 		}

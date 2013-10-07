@@ -13,13 +13,14 @@ void clear_row (uint64_t *m, nsieve_t *ns){
 
 int get_bit (uint64_t *m, int pos){
 	int block = pos/64;
-	uint64_t mask = 1 << (pos % 64);
+	uint64_t mask = 1ull << (pos % 64);
 	return (m[block] & mask) > 0 ? 1 : 0;
 }
 
 void flip_bit (uint64_t *m, int pos){
 	int block = pos/64;
-	uint64_t mask = 1 << (pos % 64);
+	uint64_t mask = 1ull << (pos % 64);
+//	printf("pos = %d; block = %d; mask = %llx\n", pos, block, mask);
 	m[block] = m[block] ^ mask;
 }
 
@@ -42,6 +43,18 @@ int is_zero_vec (uint64_t *m, int len){
 	}
 	return 1;
 }
+
+void print_row (uint64_t *m, int max_i){
+	for (int i=0; i<max_i; i++){
+		if (get_bit(m, i) == 1){
+			putchar('1');
+		} else {
+			putchar('0');
+		}
+	}
+	putchar('\n');
+}
+
 /* Hashtable functions */
 
 void ht_init (nsieve_t *ns){			// allocates space for and initializes the hashtable stored in the nsieve_t.

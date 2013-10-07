@@ -11,6 +11,7 @@ typedef struct {
 
 uint8_t fast_log (uint32_t);
 
+void add_polygroup_relations (poly_group_t *, nsieve_t *);
 void sieve_poly (block_data_t *, poly_group_t *, poly_t *, nsieve_t *);	// sieves a single polynomial completely, adding its results to relns.
 void sieve_block (block_data_t *, poly_group_t *, poly_t *, nsieve_t *, int offset);	// offset is the starting offset (block# * BLOCKSIZE). 
 void extract_relations (block_data_t *, poly_group_t *, poly_t *, nsieve_t *, int offset);

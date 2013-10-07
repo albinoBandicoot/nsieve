@@ -21,8 +21,19 @@ void solve_matrix (nsieve_t *ns){
 	for (int i=0; i < hmsize; i++){
 		history[i] = (uint64_t *) calloc (hmlen, sizeof(uint64_t));
 		flip_bit (history[i], i);
-		rmos[i] = rightmost_1 (ns->relns[i].row, ns->fb_len + 1);
+		rmos[i] = rightmost_1 (ns->relns[i].row, ns->fb_len);
 	}
+#define MAT_CHECK
+#ifdef MAT_CHECK
+	uint64_t *expm[ns->rels_needed];
+	for (int i=0; i < hmsize; i++){
+		expm[i] = (uint64_t *) malloc (ns->row_len * sizeof(uint64_t));
+		for (int j=0; j<ns->row_len; j++){
+			expm[i][j] = ns->relns[i].row[j];
+		}
+		print_row(expm[i], 64 * ns->row_len);
+	}
+#endif
 	const int expm_rows = ns->rels_needed;
 	const int expm_cols = ns->fb_len + 1;
 	for (int col = expm_cols-1; col >= 0; col --){	// col starts at fb_len because there are fb_len + 1 columns in the matrix.
@@ -34,7 +45,7 @@ void solve_matrix (nsieve_t *ns){
 			if (rmos[yolanda] == col){
 				xor_row (ns->relns[yolanda].row, ns->relns[pivot].row, ns->row_len);
 				xor_row (history[yolanda], history[pivot], hmlen);
-				rmos[yolanda] = rightmost_1 (ns->relns[yolanda].row, expm_cols);	// update the cached value of the rightmost 1.
+				rmos[yolanda] = rightmost_1 (ns->relns[yolanda].row, expm_cols-1);	// update the cached value of the rightmost 1.
 			}
 		}
 	}
@@ -78,6 +89,22 @@ void solve_matrix (nsieve_t *ns){
 	mpz_inits (temp, temp2, NULL);
 	for (int row = 0; row < expm_rows; row ++){
 		if (is_zero_vec (ns->relns[row].row, ns->row_len)){
+#ifdef MAT_CHECK
+			// This code will verify that the matrix solving worked; that is, it will xor together all of the rows
+			// specified in the history matrix, and verify that it is indeed the zero vector.
+			uint64_t check [ns->row_len];
+			clear_row (check, ns);
+			for (int i=0; i < hmsize; i++){
+				if (get_bit (history[row], i) == 1){
+					xor_row (check, expm[i], ns->row_len);
+				}
+			}
+			if (is_zero_vec (check, ns->row_len)){
+				printf("Check succeeded.\n");
+			} else {
+				printf("Check FAILED for row = %d\n", row);
+			}
+#endif
 			// yay! we have a dependency. Now the ugly math begins.
 			mpz_t lhs, rhs;	// we will end up with lhs^2 ~= rhs^2 (mod N)
 					// the left hand side is the H_p,i and the right side is the y_p,i.
@@ -118,6 +145,12 @@ void solve_matrix (nsieve_t *ns){
 			}
 			// ok, now we have lhs^2 ~= rhs (mod N). rhs should be a square if all went well, so we shall take its sqrt to get
 			// 	lhs^2 ~= v^2 (mod N)
+			if (mpz_cmp_ui(rhs, 0) < 0){	// this shouldn't happen, since there should be an even number of (-1) factors.
+				mpz_neg(rhs, rhs);
+				printf("WARNING - found negative rhs; this should not happen; proceeding with taking |rhs|.\n");
+			} else {
+				printf ("GOOD - rhs was positive.\n");
+			}
 			mpz_sqrt (rhs, rhs);
 			mpz_sub (temp, rhs, lhs);
 			mpz_gcd (temp, temp, ns->N);
