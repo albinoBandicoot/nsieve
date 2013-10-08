@@ -67,10 +67,11 @@ const double params[NPLEVELS][NPARAMS] =   { 	{100,  5000, 5000,  1 * 32768, 1.3
 					   };
 
 void set_params (nsieve_t *ns, int p1, int p2, double fac){
-	ns -> fb_bound = (uint32_t) (params[p1][PARAM_FBBOUND] * fac + params[p2][PARAM_FBBOUND] * (1 - fac));
-	ns -> lp_bound = (uint32_t) (params[p1][PARAM_LPBOUND] * fac + params[p2][PARAM_LPBOUND] * (1 - fac));
-	ns -> M        = (uint32_t) (params[p1][PARAM_M] * fac + params[p2][PARAM_M] * (1 - fac));
-	ns -> T        = (float)    (params[p1][PARAM_T] * fac + params[p2][PARAM_T] * (1 - fac));
+	// -1 indicates that the property was not manually overridden by the user via a command line argument.
+	if (ns->fb_bound == -1) ns -> fb_bound = (uint32_t) (params[p1][PARAM_FBBOUND] * fac + params[p2][PARAM_FBBOUND] * (1 - fac));
+	if (ns->lp_bound == -1) ns -> lp_bound = (uint32_t) (params[p1][PARAM_LPBOUND] * fac + params[p2][PARAM_LPBOUND] * (1 - fac));
+	if (ns->M == -1) ns -> M        = (uint32_t) (params[p1][PARAM_M] * fac + params[p2][PARAM_M] * (1 - fac));
+	if (ns->T == -1) ns -> T        = (float)    (params[p1][PARAM_T] * fac + params[p2][PARAM_T] * (1 - fac));
 	printf("Selected parameters: \n\tfb_bound = %d \n\tlp_bound = %d \n\tM = %d\n\tT - %f\n", ns->fb_bound, ns->lp_bound, ns->M, ns->T);
 }
 
@@ -173,11 +174,37 @@ int main (int argc, const char *argv[]){
 	nsieve_t ns;
 	mpz_t n;
 	mpz_init (n);
-	if (argc >= 2){
-		mpz_set_str (n, argv[1], 10);
-	} else {
+
+	int pos = 1;
+	int nspecd = 0;
+
+	ns.T = -1;
+	ns.fb_bound = -1;
+	ns.lp_bound = -1;
+	ns.M = -1;
+	while (pos < argc){
+		if (!strcmp(argv[pos], "-T")){
+			ns.T = atof (argv[pos+1]);
+			pos ++;
+		} else if (!strcmp(argv[pos], "-fbb")){
+			ns.fb_bound = atoi (argv[pos+1]);
+			pos ++;
+		} else if (!strcmp(argv[pos], "-lpb")){
+			ns.lp_bound = atoi (argv[pos+1]);
+			pos++;
+		} else if (!strcmp(argv[pos], "-M")){
+			ns.M = atoi (argv[pos+1]);
+			pos++;
+		} else {
+			mpz_set_str (n, argv[pos], 10);
+			nspecd = 1;
+		}
+		pos ++;
+	}
+	if (!nspecd){
 		mpz_inp_str (n, stdin, 10);
 	}
+
 	nsieve_init (&ns, n);
 
 	factor (&ns);
