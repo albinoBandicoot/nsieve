@@ -61,7 +61,7 @@ typedef struct {
 
 typedef struct relation {
 	poly_t  *poly;
-	uint32_t  x;
+	int32_t  x;
 	uint32_t cofactor;
 } rel_t;
 

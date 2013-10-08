@@ -57,12 +57,12 @@ int is_zero_vec (uint64_t *m, int len){
 void print_row (uint64_t *m, int max_i){
 	for (int i=0; i<max_i; i++){
 		if (get_bit(m, i) == 1){
-			putchar('1');
+			fprintf(stderr, "1");
 		} else {
-			putchar('0');
+			fprintf(stderr, "0");
 		}
 	}
-	putchar('\n');
+	fprintf(stderr, "\n");
 }
 
 /* Hashtable functions */

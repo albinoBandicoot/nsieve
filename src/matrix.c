@@ -167,6 +167,14 @@ void solve_matrix (nsieve_t *ns){
 //				printf ("GOOD - rhs was positive.\n");
 			}
 			mpz_sqrt (rhs, rhs);
+
+			mpz_mod (rhs, rhs, ns->N);	// this is only necessary to print out the congruence of squares.
+		//	fprintf("Found congruence of squares: ");
+			mpz_out_str(stderr, 10, lhs);
+			fprintf(stderr, " ");
+			mpz_out_str(stderr, 10, rhs);
+			fprintf(stderr, "\n");
+
 			mpz_sub (temp, rhs, lhs);
 			mpz_gcd (temp, temp, ncopy);	// take the gcd with ncopy instead of N, to avoid reprinting already found factors.
 			mpz_abs (temp, temp);	// probably unneceesary

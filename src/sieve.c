@@ -79,7 +79,7 @@ void sieve_block (block_data_t *data, poly_group_t *pg, poly_t *q, nsieve_t *ns,
 	memset (data->sieve, 0, sizeof(uint16_t) * BLOCKSIZE);	// clear the sieve
 	mpz_t temp;
 	mpz_init (temp);
-	for (int i = 0; i < ns->fb_len; i++){
+	for (int i = 10; i < ns->fb_len; i++){
 		// first compute the offsets. 
 		uint32_t p = ns->fb[i];
 		/* We compute start (the value for which poly(start) ~= 0 (mod p)) as 

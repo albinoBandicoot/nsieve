@@ -171,6 +171,8 @@ void factor (nsieve_t *ns){
 }
 
 int main (int argc, const char *argv[]){
+	printf ("Using GMP version %s\n", gmp_version);
+	printf ("It was compiled with %s, using flags %s\n", __GMP_CC, __GMP_CFLAGS);
 	nsieve_t ns;
 	mpz_t n;
 	mpz_init (n);

@@ -7,13 +7,16 @@ vpath %.o build/
 
 OBJECTS= build/*.o
 
-all: nsieve numgen prcheck
+all: nsieve numgen prcheck tdiv
 
 prcheck: prcheck.c
 	$(CC) $(CFLAGS) -o bin/prcheck src/prcheck.c -lgmp
 
 numgen: numgen.c
 	$(CC) $(CFLAGS) -o bin/numgen src/numgen.c -lgmp
+
+tdiv: tdiv.c
+	$(CC) $(CFLAGS) -o bin/tdiv src/tdiv.c -lgmp
 
 nsieve: poly.o sieve.o common.o filter.o nsieve.o matrix.o
 	ar rc build/libnsieve.a ${OBJECTS} 
@@ -33,4 +36,4 @@ matrix.o: matrix.c matrix.h
 	$(CC) $(CFLAGS) -c -o build/matrix.o src/matrix.c
 
 clean:
-	rm -f build/*.o build/libnsieve.a bin/nsieve 
+	rm -f -R build/* bin/*
