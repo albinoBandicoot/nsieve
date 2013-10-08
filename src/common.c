@@ -31,10 +31,20 @@ void xor_row (uint64_t *res, uint64_t *op, int len){
 }
 
 int rightmost_1 (uint64_t *m, int max_i){
-	for (int i = max_i; i >= 0; i--){
-		if (get_bit(m, i) == 1)	return i;
+	int block = max_i / 64;
+	// first skip over all of the leading 0 blocks.
+	while (block >= 0 && m[block] == 0)  block--;
+	if (m[block] == 0) return -1;
+
+	// now we need to determine the rightmost 1 in m[block].
+	uint64_t x = m[block];
+	int pos = 0;
+	while ((x & (1ull << 63)) == 0){
+		pos++;
+		x = x << 1;
 	}
-	return -1;
+	int res =  (63 - pos) + 64 * block;
+	return res;
 }
 
 int is_zero_vec (uint64_t *m, int len){

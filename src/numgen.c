@@ -12,6 +12,13 @@ int main (int argc, const char *argv[]){
 	mpz_inits (a, b, NULL);
 	mpz_urandomb (a, rand, asize);
 	mpz_urandomb (b, rand, bsize);
+	while (mpz_sizeinbase (a, 2) != asize){
+		mpz_urandomb (a, rand, asize);
+	}
+	while (mpz_sizeinbase (b, 2) != bsize){
+		mpz_urandomb (b, rand, bsize);
+	}
+
 	mpz_nextprime(a, a);
 	mpz_nextprime(b, b);
 	mpz_mul (a, a, b);

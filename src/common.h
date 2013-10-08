@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
+#include <time.h>
 #include <gmp.h>
 
 #define KMAX 12
@@ -81,6 +82,15 @@ typedef struct {
 } hashtable_t;
 
 typedef struct {
+	long init_time;
+	long sieve_time;
+	long filter_time;
+	long matsolve_time;
+	long facdeduct_time;
+	long total_time;
+} time_data_t;
+
+typedef struct {
 	mpz_t N;		// the number to factor
 	unsigned char k;	// the number of distinct prime squares to use to construct polynomial 'A' values
 	unsigned short bvals;	// the number of distinct values for 'B' - given by 2^(k-1).
@@ -103,6 +113,8 @@ typedef struct {
 
 	uint32_t lp_bound;	// large prime bound. Relations with one factor between the top of the factor base and lp_bound are admitted as partials.
 	hashtable_t partials;	// hashtable for storing partial relations. This might have to change for double large primes.
+
+	time_data_t timing;
 
 } nsieve_t;
 

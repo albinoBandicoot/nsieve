@@ -16,7 +16,7 @@ void add_polygroup_relations (poly_group_t *pg, nsieve_t *ns){
 	// partials from this poly group shared a cofactor it could be used, but that's more thinking and debugging than it's worth)
 	// Theoretically, it would probably be best to pick the sparsest relation as the victim, but we'll just pick the first one.
 	for (int i=0; i < pg->nrels; i++){
-		printf("Looking at i = %d; cofactor = %d\n", i, pg->relns[i]->cofactor);
+//		printf("Looking at i = %d; cofactor = %d\n", i, pg->relns[i]->cofactor);
 		if (pg -> relns[i]->cofactor == 1){
 			pg->victim = pg->relns[i];
 			break;

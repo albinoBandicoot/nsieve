@@ -14,6 +14,9 @@
 */
 
 void solve_matrix (nsieve_t *ns){
+	printf ("\nStarting gaussian elimination... \n");
+	long start = clock();
+
 	const int hmlen = (ns->rels_needed -1)/64 + 1;
 	const int hmsize = ns->rels_needed;
 	uint64_t *history[hmsize];
@@ -23,7 +26,7 @@ void solve_matrix (nsieve_t *ns){
 		flip_bit (history[i], i);
 		rmos[i] = rightmost_1 (ns->relns[i].row, ns->fb_len);
 	}
-#define MAT_CHECK
+//#define MAT_CHECK
 #ifdef MAT_CHECK
 	uint64_t *expm[ns->rels_needed];
 	for (int i=0; i < hmsize; i++){
@@ -37,6 +40,10 @@ void solve_matrix (nsieve_t *ns){
 	const int expm_rows = ns->rels_needed;
 	const int expm_cols = ns->fb_len + 1;
 	for (int col = expm_cols-1; col >= 0; col --){	// col starts at fb_len because there are fb_len + 1 columns in the matrix.
+		if ((expm_cols - col) % 50 == 0){
+			printf("Column %d of %d\r", expm_cols - col, expm_cols);
+			fflush(stdout);
+		}
 		int pivot = 0;
 		while (pivot < expm_rows && rmos[pivot] != col){
 			pivot ++;
@@ -49,6 +56,9 @@ void solve_matrix (nsieve_t *ns){
 			}
 		}
 	}
+	printf("\nMatrix solved; deducing factors...\n");
+	ns->timing.matsolve_time = clock() - start;
+	start = clock();
 
 /* Factor deduction and dealing with multiple polynomials, etc.
  *
@@ -84,9 +94,9 @@ void solve_matrix (nsieve_t *ns){
  * This is our desired congruence of squres. 
 */
 
-	mpz_t ncopy, temp, temp2;
+	mpz_t ncopy, temp;
 	mpz_init_set (ncopy, ns->N);
-	mpz_inits (temp, temp2, NULL);
+	mpz_inits (temp, NULL);
 	for (int row = 0; row < expm_rows; row ++){
 		if (is_zero_vec (ns->relns[row].row, ns->row_len)){
 #ifdef MAT_CHECK
@@ -153,23 +163,44 @@ void solve_matrix (nsieve_t *ns){
 				mpz_neg(rhs, rhs);
 				printf("WARNING - found negative rhs; this should not happen; proceeding with taking |rhs|.\n");
 			} else {
-				printf ("GOOD - rhs was positive.\n");
+//				printf ("GOOD - rhs was positive.\n");
 			}
 			mpz_sqrt (rhs, rhs);
 			mpz_sub (temp, rhs, lhs);
-			mpz_gcd (temp, temp, ns->N);
+			mpz_gcd (temp, temp, ncopy);	// take the gcd with ncopy instead of N, to avoid reprinting already found factors.
 			mpz_abs (temp, temp);	// probably unneceesary
 			if (mpz_cmp_ui (temp, 1) > 0){
 				if (mpz_cmp (temp, ns->N) != 0){	// then it's a nontrivial factor!!!
-					mpz_out_str (stdout, 10, temp);
-					if (mpz_probab_prime_p (temp, 10)){
-						printf (" (prp)\n");
-					} else {
-						printf (" (c)\n");
+					if (mpz_divisible_p(ncopy, temp)){	// then we haven't found it before.
+						if (mpz_probab_prime_p (temp, 10)){
+							mpz_out_str (stdout, 10, temp);
+							printf (" (prp)\n");
+							mpz_divexact(ncopy, ncopy, temp);
+							if (mpz_probab_prime_p (ncopy, 10)){
+								mpz_out_str(stdout, 10, ncopy);
+								printf (" (prp)\n");
+								mpz_set_ui(ncopy, 1);
+							}
+							if (mpz_cmp_ui(ncopy, 1) == 0){	// we're done!
+								mpz_clears(lhs, rhs, temp, ncopy, NULL);
+								ns->timing.facdeduct_time = clock() - start;
+								return;
+							}
+						}
 					}
 				}
 			}
+			mpz_clears(lhs, rhs, NULL);
 		}
 	}
 
+	if (mpz_cmp_ui(ncopy, 1) != 0){
+		mpz_out_str (stdout, 10, ncopy);
+		if (mpz_probab_prime_p (ncopy, 10)){
+			printf (" (prp)\n");
+		} else {
+			printf (" (c)\n");
+		}
+	}
+	ns->timing.facdeduct_time = clock() - start;
 }

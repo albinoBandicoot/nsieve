@@ -60,10 +60,10 @@ const int PARAM_T = 4;
 #define NPLEVELS  4	// number of entries in the params table
 #define  NPARAMS  5
 
-const double params[NPLEVELS][NPARAMS] =   { 	{100,  1000, 1 << 16, 1 * 32768, 1.3},
-						{120,  1000, 1 << 18, 2 * 32768, 1.3},
-						{140, 15000, 1 << 20, 2 * 32768, 1.3},
-					    	{160, 25000, 1 << 21, 4 * 32768, 1.3}
+const double params[NPLEVELS][NPARAMS] =   { 	{100,  5000, 5000,  1 * 32768, 1.3},
+						{120, 11000, 11000, 2 * 32768, 1.3},
+						{140, 25000, 25000, 2 * 32768, 1.3},
+					    	{160, 55000, 55000, 2 * 32768, 1.3}
 					   };
 
 void set_params (nsieve_t *ns, int p1, int p2, double fac){
@@ -98,6 +98,7 @@ void select_multiplier (nsieve_t *ns){
  * fields in the nsieve_t. Notably, it will generate the factor base, compute the square roots, and allocate space for the matrix and partials. 
  */
 void nsieve_init (nsieve_t *ns, mpz_t n){
+	long start = clock();
 	// all of the parameters here are complete BS for now.
 	mpz_init_set (ns->N, n);
 
@@ -119,10 +120,12 @@ void nsieve_init (nsieve_t *ns, mpz_t n){
 	}
 
 	ht_init (ns);
+	ns->timing.init_time = clock() - start;
 }
 
 /* Once ns has been initialized (by calling nsieve_init), this method is called to actaully perform the bulk of the factorization */
 void factor (nsieve_t *ns){
+	long start = clock();
 	poly_gpool_t gpool;
 	gpool_init (&gpool, ns);
 
@@ -130,25 +133,33 @@ void factor (nsieve_t *ns){
 	block_data_t sievedata;
 	printf("Using k = %d; gvals range from %d to %d.\n", ns->k, gpool.gpool[0], gpool.gpool[gpool.ng-1]);
 //	return;
+	int poly_ct = 0;
+	int pg_ct = 0;
 	while (ns->nfull /*+ ns->npartial*/ < ns->rels_needed){
 		// while we don't have enough relations, sieve another poly group.
 		poly_group_t *curr_polygroup = (poly_group_t *) malloc(sizeof(poly_group_t));
 		polygroup_init (curr_polygroup, ns);
 		generate_polygroup (&gpool, curr_polygroup, ns);
-		printf("Starting new polygroup. We have %d full and %d partial relations\n.", ns->nfull, ns->npartial);
+//		printf("Starting new polygroup. We have %d full and %d partial relations\n.", ns->nfull, ns->npartial);
 		for (int i = 0; i < ns -> bvals; i ++){
 			poly_t *curr_poly = (poly_t *) malloc (sizeof (poly_t));
 			poly_init (curr_poly);
 			generate_poly (curr_poly, curr_polygroup, ns, i);
-
+/*
 			printf("\t");
 			poly_print (curr_poly);
-
+*/
 			sieve_poly (&sievedata, curr_polygroup, curr_poly, ns);
 //			printf("We now have %d full relations and %d partials.\nSwitching polynomials..., M = %d\n", ns->nfull, ns->npartial, curr_poly.M);
 		}
 		add_polygroup_relations (curr_polygroup, ns);
+		pg_ct ++;
+		poly_ct = pg_ct * ns->bvals;
+		printf("Have %d of %d relations; sieved %d polynomials from %d groups. \r", ns->nfull, ns->rels_needed, poly_ct, pg_ct);
+		fflush(stdout);
 	}
+	ns->timing.sieve_time = clock() - start;
+	ns->timing.filter_time = 0;
 	// now we have enough relations, so we build the matrix (combining the partials).
 
 	// Filter the matrix to reduce its size without reducing its yummy content. This will accelerate the matrix solving step, and also reduce the memory usage.
@@ -170,4 +181,10 @@ int main (int argc, const char *argv[]){
 	nsieve_init (&ns, n);
 
 	factor (&ns);
+
+	printf ("\nTiming summary: \
+		 \n\tInitialization:   %ld \
+		 \n\tSieving:          %ld \
+		 \n\tMatrix solving:   %ld \
+		 \n\tFactor deduction: %ld\n", ns.timing.init_time, ns.timing.sieve_time, ns.timing.matsolve_time, ns.timing.facdeduct_time);
 }
