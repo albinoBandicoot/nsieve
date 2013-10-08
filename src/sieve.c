@@ -5,6 +5,7 @@ void sieve_poly (block_data_t *data, poly_group_t *pg, poly_t *p, nsieve_t *ns){
 	for (int i=0; i < 2*p->M/BLOCKSIZE; i++){
 		sieve_block (data, pg, p, ns, -p->M + i * BLOCKSIZE);
 	}
+	free (p->bmodp);	// free these temporary precomputed values.
 }
 
 
@@ -101,11 +102,22 @@ void sieve_block (block_data_t *data, poly_group_t *pg, poly_t *q, nsieve_t *ns,
 		if (bad == 1) continue;
 		// we should really get rid of this multiprecision code here and precompute the b % p, so then
 		// everything fits in 4 bytes.
+		int64_t z = ns->roots[i] + q->bmodp[i];	// this is a + here because we actually precomputed -b % p.
+							// this has to be 64 bits, as the intermediate values could get above 2^32 easily.
+		z *= pg->ainverses[i];
+		z -= block_start;		// there is the possibility that z is now negative. We must then be careful with the mod.
+		if (z < 0){
+			z = p + (z % p);	// because C's mod function doesn't actually do a mathematicla mod for negative numbers.
+		} else {
+			z %= p;
+		}
+		/*
 		mpz_set_ui (temp, ns->roots[i]);
 		mpz_sub (temp, temp, q->b);
 		mpz_mul_ui (temp, temp, pg->ainverses[i]);
 		mpz_sub_si (temp, temp, block_start);
 		uint32_t z = mpz_mod_ui (temp, temp, p);
+		*/
 
 		while (z < BLOCKSIZE){
 			data->sieve[z] += ns->fb_logs[i];
@@ -122,12 +134,22 @@ void sieve_block (block_data_t *data, poly_group_t *pg, poly_t *q, nsieve_t *ns,
 
 		// now do the other root (p - ns->roots[i])
 		if (p == 2) continue;	// there's only one root of 2, so continuing would erroneously duplicate the sieve on p=2.
+
+		z = p - ns->roots[i] + q->bmodp[i];
+		z *= pg->ainverses[i];
+		z -= block_start;
+		if (z < 0){
+			z = p + (z % p);
+		} else {
+			z %= p;
+		}
+		/*
 		mpz_set_ui (temp, p - ns->roots[i]);
 		mpz_sub (temp, temp, q->b);
 		mpz_mul_ui (temp, temp, pg->ainverses[i]);
 		mpz_sub_si (temp, temp, block_start);
 		z = mpz_mod_ui (temp, temp, p);
-
+		*/
 		while (z < BLOCKSIZE){
 			data->sieve[z] += ns->fb_logs[i];
 #ifdef CHECK

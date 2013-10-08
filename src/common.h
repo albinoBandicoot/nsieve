@@ -33,6 +33,8 @@ typedef struct {
 	mpz_t a;
 	mpz_t b;
 	mpz_t c;
+	uint32_t *bmodp;	// for each prime p in the factor base, we compute b mod p. This accelerates the sieving, since we may do multiple
+				// blocks on each polynomial. This array can (and should) be freed after the polynomial is sieved.
 	uint32_t M;	// we compute this on a per-polynomial basis. The value we store is rounded to the nearest multiple of BLOCKSIZE.
 //	it turns out we don't need to keep istart, since it is (-b/a) - M. This is because b is produced as the solution to a congruence equation mod a, so it must be < a, so (-b/a) is in [-1, 1]. Thus the sieve interval can be taken to always be [-M, M].
 } poly_t;

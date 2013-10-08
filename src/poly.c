@@ -289,8 +289,11 @@ void generate_poly (poly_t *p, poly_group_t *pg, nsieve_t *ns, int i){
 	mpz_tdiv_q(temp, temp, p->a);
 	p->M = mpz_get_ui(temp);
 	p->M = (p->M / BLOCKSIZE + 1) * BLOCKSIZE;
-	if (p->M > 128000){
-		printf("Warning: large sieve range: %d\n", p->M);
+	// compute -B % p for each prime in the factor base.
+	p -> bmodp = (uint32_t *) malloc (ns->fb_len * sizeof(uint32_t));
+	for (int i=0; i < ns->fb_len; i++){
+		mpz_neg (temp, p->b);
+		p->bmodp[i] = mpz_mod_ui (temp, temp, ns->fb[i]);
 	}
 	mpz_clear(temp);
 }
