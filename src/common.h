@@ -137,6 +137,6 @@ uint32_t ht_count (hashtable_t *ht);		// counts the number of full relations tha
 /* Generic auxillary functions */ 
 
 uint32_t find_root (mpz_t a, uint32_t p);	// finds modular square root of a (mod p)
-uint32_t find_root_ui (uint32_t a, uint32_t p);
+//uint32_t find_root_ui (uint32_t a, uint32_t p);
 
 #endif

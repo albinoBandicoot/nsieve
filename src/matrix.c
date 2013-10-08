@@ -141,7 +141,7 @@ void solve_matrix (nsieve_t *ns){
 					mpz_invert (temp, victim->poly->a, ns->N);
 					mpz_mul (lhs, lhs, temp);
 
-//					mpz_mod (lhs, lhs, ns->N);		// reduce mod N to keep sizes small
+					mpz_mod (lhs, lhs, ns->N);		// reduce mod N to keep sizes small
 
 					// now update RHS
 					// rhs = rhs * p(victim.x) * q(m.x)
@@ -150,6 +150,7 @@ void solve_matrix (nsieve_t *ns){
 
 					poly (temp, m->r1->poly, m->r1->x);
 					mpz_mul (rhs, rhs, temp);
+
 					// we can't reduce rhs mod N, since we have to take the sqrt of its final value in the integers, not Z/nZ.
 
 					if (m->r2 != NULL){	// then this is a partial and we have more work to do.

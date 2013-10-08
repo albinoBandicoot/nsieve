@@ -126,20 +126,50 @@ uint32_t ht_count (hashtable_t *ht){		// counts the number of full relations tha
 	return res;
 }
 
-/* Generic auxillary functions */ 
+/* Generic auxillary functions */
 
-uint32_t find_root (mpz_t a, uint32_t p){	// finds modular square root of a (mod p)
+uint32_t find_root (mpz_t k, uint32_t p){	// finds modular square root of k (mod p)
 	// for now we just do the stupid brute force thing. This will be replaced later with some of the modular
 	// exponentiation algorithms (for certain cases), and perhaps the Tonelli-Shanks algorithm for the remaining case.
-	mpz_t temp;
-	mpz_init (temp);
-	uint32_t k = (uint32_t) mpz_mod_ui(temp, a, p);
-	mpz_clear (temp);
-	return find_root_ui (k, p);
-}
+	mpz_t pol, temp, temp2;	// the only reason the names are like this is because that's how they were in the place I stole this from.
+	mpz_inits (pol, temp, temp2, NULL);
 
-uint32_t find_root_ui (uint32_t a, uint32_t p){
-	a %= p;
+	mpz_mod_ui (temp, k, p);
+	uint32_t a = mpz_get_ui (temp);
+	uint32_t res = 0;
+	// This Pocklington code is stolen from my previous quadratic sieve implementation.
+	if (p % 4 == 3){	// use Case 1 of Pocklington's algorithm.
+		uint32_t m = p/4;
+		mpz_set_ui(pol, p);
+		mpz_powm_ui (temp, temp, m+1, pol);
+		return mpz_get_ui (temp);
+	} else if (p % 8 == 5){
+		uint32_t m = p/8;
+		mpz_set_ui (pol, p);
+		mpz_powm_ui (temp2, temp, 2*m+1, pol);
+		if (mpz_cmp_ui(temp2, 1) == 0){
+			mpz_powm_ui(temp2, temp, m+1, pol);
+			res = mpz_get_ui (temp2);
+			mpz_clears (pol, temp, temp2, NULL);
+			return res;
+		} else {
+			mpz_mul_ui(temp, temp, 4);
+			mpz_powm_ui(temp2, temp, m+1, pol);
+			if (mpz_divisible_ui_p(temp2, 2)){
+				res = mpz_get_ui(temp2)/2;
+				mpz_clears (pol, temp, temp2, NULL);
+				return res;
+			} else {
+				res = (mpz_get_ui(temp2)+p)/2;
+				mpz_clears (pol, temp, temp2, NULL);
+				return res;
+			}
+		}
+	}
+	// otherwise, do brute force.
+
+	mpz_clears (pol, temp, temp2, NULL);
+
 	uint32_t t = 0;
 	while ( t*t % p != a && t < p/2 + 1 ){
 		t ++;

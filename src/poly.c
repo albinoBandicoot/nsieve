@@ -143,7 +143,7 @@ void gpool_init (poly_gpool_t *gp, nsieve_t *ns){
 	gp->ng = ng;
 	gp->frogs = (uint32_t *)(malloc(k * sizeof(uint32_t)));	// these hold indices into gpool.
 	for (int i=0; i < k; i++){
-		gp->frogs[i] = i;
+		gp->frogs[i] = ng - (k - i - 1) - 1;	// frogs are stored in decreasing order
 	}
 	gp->k = k;
 	ns->k = k;
@@ -158,24 +158,23 @@ void advance_gpool (poly_gpool_t *gp, poly_group_t *group){	// advances the frog
 	}
 
 	// now advance the frogs.
-	int ng = gp->ng;	// these are just for convenience.
-	int j = k-1;
-	while (gp->frogs[j] == ng-j){
-		j--;
-		if (j < 0){	// then we ran out of polynomials.
+	int j = 0;
+	while (gp->frogs[j] == j){
+		j++;
+		if (j == k){	// then we ran out of polynomials.
 			printf("Fatal error: Out of polynomials!!!\n");
 			exit(1);
 		}
 	}
 	// j is now the index of the first frog that is not jammed against the end of the pool. Or edge of the pond, I suppose. Its name is Billy.
 	// I guess for the frogs' sake its a good thing I'm not writing this in Python.
-	gp->frogs[j] ++;	// advance Billy.
+	gp->frogs[j] --;	// advance Billy.
 	// now move all of the beached frogs back to being just ahead of billy, with no space between any of them.
 	int billy = j;
-	j++;
-	while (j < k){	// most of the time, this won't even execute, since we'll just be advancing the highest frog.
+	j--;
+	while (j >= 0){	// most of the time, this won't even execute, since we'll just be advancing the highest frog.
 		gp->frogs[j] = gp->frogs[billy] + (j - billy);
-		j++;
+		j--;
 	}
 }
 
@@ -190,10 +189,13 @@ void generate_polygroup (poly_gpool_t *gp, poly_group_t *pg, nsieve_t *ns){
 	// However, there is no particular requirement that they be of comparable sizes, so this is just a rough guide.
 	
 	advance_gpool (gp, pg);
+//	printf("Multiplying together these g-vals: %d", pg->gvals[0]);
 	mpz_set_ui (pg->a, pg->gvals[0]);	// multiply all of the g-values together to get A.
 	for (int i=1; i < gp->k; i++){
 		mpz_mul_ui(pg->a, pg->a, pg->gvals[i]);
+//		printf(", %d", pg->gvals[i]);
 	}
+//	printf("\n");
 	
 	/* Now that we've chosen A, we can compute the values of B. The goal is to produce all values of B which satisfy 
 	 * B^2 = N (mod A). Since A is composite, this is a little tricky, but we know it's prime factorization (that's how we
@@ -287,6 +289,9 @@ void generate_poly (poly_t *p, poly_group_t *pg, nsieve_t *ns, int i){
 	mpz_tdiv_q(temp, temp, p->a);
 	p->M = mpz_get_ui(temp);
 	p->M = (p->M / BLOCKSIZE + 1) * BLOCKSIZE;
+	if (p->M > 128000){
+		printf("Warning: large sieve range: %d\n", p->M);
+	}
 	mpz_clear(temp);
 }
 
