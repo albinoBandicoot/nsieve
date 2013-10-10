@@ -95,7 +95,7 @@ void gpool_init (poly_gpool_t *gp, nsieve_t *ns){
 	int c_den = 10;	// c = 0.6
 
 	int k = 12;
-	while (k >= 1) {
+	while (k > 2) {	// we never really want k = 1.
 		// compute gmin and gmax
 		mpz_mul_ui(temp, aopt, c_num);
 		mpz_tdiv_q_ui(temp, temp, c_den);

@@ -57,15 +57,18 @@ const int PARAM_LPBOUND = 2;
 const int PARAM_M = 3;
 const int PARAM_T = 4;
 
-#define NPLEVELS  6	// number of entries in the params table
+#define NPLEVELS  9	// number of entries in the params table
 #define  NPARAMS  5
 
-const double params[NPLEVELS][NPARAMS] =   { 	{100,  5000,  50, 1 * 131072, 1.4},
-						{120, 11000,  60, 1 * 131072, 1.4},
-						{140, 25000,  70, 1 * 131072, 1.4},
-					    	{160, 55000,  70, 1 * 131072, 1.4},
-						{180, 95000,  75, 1 * 131072, 1.4},
-						{200, 180000, 75, 1 * 131072, 1.4}
+const double params[NPLEVELS][NPARAMS] =   { 	{ 80,  2000,  50,  1 * 131072, 1.4},
+						{100,  5000,  50,  1 * 131072, 1.4},
+						{120,  8000,  60,  1 * 131072, 1.4},
+						{140, 17000,  80,  1 * 131072, 1.4},
+					    	{160, 30000,  110, 1 * 131072, 1.4},
+						{180, 66000,  120, 1 * 131072, 1.4},
+						{200, 120000, 130, 1 * 131072, 1.4}, /* beyond this point these are guesses. */
+						{220, 230000, 140, 1 * 131072, 1.4}, 	
+						{240, 430000, 155, 1 * 131072, 1.4}
 					   };
 
 void set_params (nsieve_t *ns, int p1, int p2, double fac){
