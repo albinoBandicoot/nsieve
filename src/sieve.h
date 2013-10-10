@@ -6,7 +6,7 @@
 
 
 typedef struct {
-	uint16_t sieve[BLOCKSIZE];
+	uint8_t sieve[BLOCKSIZE];
 } block_data_t;
 
 uint8_t fast_log (uint32_t);

@@ -11,7 +11,7 @@
 #include <gmp.h>
 
 #define KMAX 12
-#define BLOCKSIZE 16384
+#define BLOCKSIZE 131072
 
 struct relation;	// this is going to be a rel_t.
 
@@ -80,6 +80,7 @@ typedef struct htentry{	// struct for the linked list in the separate-chaining h
 
 typedef struct {
 	uint32_t nbuckets;
+	uint32_t nentries;	// just for keeping track of how much junk we've stuffed in the hashtable; mostly for observing how fast partials are accumulating.
 	ht_entry_t **buckets;
 } hashtable_t;
 
@@ -110,6 +111,8 @@ typedef struct {
 	uint32_t nfull;		// running count of the number of full relations found thus far.
 	uint32_t npartial;	// running count of the number of partial relations found so far. This will be updated by calling ht_count, probably at the end of each batch of polynomials (or maybe after each poly, depending on how many relations are being recovered from each poly vs. group)).
 
+	uint32_t tdiv_ct;	// number of relations that underwent trial division (passed the sieve)
+	uint64_t sieve_locs;	// how many positions were sieved.
 	uint32_t row_len;	// number of 64-bit chunks in a row of the matrix.
 	matrel_t *relns;	// this is the list of relations, and also constitutes the matrix. 
 
