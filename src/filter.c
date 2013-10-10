@@ -14,8 +14,18 @@ void build_matrix (nsieve_t * ns){
 */
 
 void combine_bucket (ht_entry_t *h, nsieve_t *ns){
-	if (h == NULL) return;
 	while (1){
+		if (h == NULL) return;
+		if (h->rel->poly->group->victim == NULL){
+			h = h->next;
+			continue;
+		}
+		/*
+		while (h != NULL && h->rel->poly->group->victim == NULL){	// we must skip it if there's no victim, because this means
+			// that the poly group it's associated with had no full relations, so the partials are unusable.
+			h = h->next;
+		}
+		*/
 		rel_t *base_rel = h->rel;
 		uint64_t base_factors[ns->row_len];
 		fb_factor_rel (base_rel, &base_factors[0], ns);
@@ -24,6 +34,10 @@ void combine_bucket (ht_entry_t *h, nsieve_t *ns){
 		while (h != NULL && base_rel->cofactor == h->rel->cofactor){
 //			printf("Making combined rel with base cof = %d and h cof = %d\n", base_rel->cofactor, h->rel->cofactor);
 			// any h inside this loop creates another combined relation.
+			if (h->rel->poly->group->victim == NULL){
+				h = h->next;
+				continue;	// we can't use this relation; there were no full relations in its pg to use as the victim.
+			}
 			matrel_t *m = &ns->relns[ns->nfull];
 			m -> r1 = base_rel;
 			m -> r2 = h -> rel;
@@ -45,16 +59,19 @@ void combine_bucket (ht_entry_t *h, nsieve_t *ns){
 }
 
 void combine_partials (nsieve_t *ns){
+	long start = clock();
 	for (int i=0; i < ns->partials.nbuckets; i++){
 		if (i % 100 == 0){
 			printf("Combining bucket %d\r", i);
 			fflush(stdout);
 		}
 		if (ns->nfull >= ns->rels_needed){
+			ns->timing.filter_time = clock() - start;
 			return;
 		}
 		combine_bucket (ns->partials.buckets[i], ns);
 	}
+	ns->timing.filter_time = clock() - start;
 }
 
 void filter (nsieve_t *ns){

@@ -128,10 +128,12 @@ void solve_matrix (nsieve_t *ns){
 					multiply_in_relation (lhs, rhs, m->r1, ns, 0);
 					if (m->r2 != NULL){	// partial
 						multiply_in_relation (lhs, rhs, m->r2, ns, 1);
-					//	mpz_divexact_ui (rhs, rhs, m->r1->cofactor * m->r1->cofactor);	// divide by the cofactor
+						mpz_divexact_ui (rhs, rhs, m->r1->cofactor);
+						mpz_divexact_ui (rhs, rhs, m->r1->cofactor);	// divide by the cofactor^2
+
 						mpz_set_ui (temp, m->r1->cofactor);
 						mpz_invert (temp, temp, ns->N);
-						mpz_mul (temp, temp, temp);
+					//	mpz_mul (temp, temp, temp);
 						mpz_mul (lhs, lhs, temp);
 						mpz_mod (lhs, lhs, ns->N);
 					}
@@ -146,6 +148,11 @@ void solve_matrix (nsieve_t *ns){
 				printf("WARNING - found negative rhs; this should not happen; proceeding with taking |rhs|.\n");
 			} else {
 //				printf ("GOOD - rhs was positive.\n");
+			}
+			mpz_sqrt (temp, rhs);
+			mpz_mul (temp, temp, temp);
+			if (mpz_cmp (temp, rhs) != 0){
+				printf ("WARNING - rhs was not a square!!!\n");
 			}
 			mpz_sqrt (rhs, rhs);
 

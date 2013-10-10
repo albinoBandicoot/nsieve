@@ -275,7 +275,7 @@ void construct_relation (mpz_t qx, int32_t x, poly_t *p, nsieve_t *ns){
 	for (int i=0; i < ns->fb_len; i++){
 		while (mpz_divisible_ui_p (qx, ns->fb[i])){
 			mpz_divexact_ui(qx, qx, ns->fb[i]);
-			if (mpz_cmp_ui(qx, ns->fb[i] * ns->fb[i]) == 0){
+			if (mpz_cmp_ui(qx, ns->fb[i] * ns->fb[i]) < 0){
 				break;
 			}
 		}

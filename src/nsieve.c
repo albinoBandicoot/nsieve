@@ -57,22 +57,25 @@ const int PARAM_LPBOUND = 2;
 const int PARAM_M = 3;
 const int PARAM_T = 4;
 
-#define NPLEVELS  4	// number of entries in the params table
+#define NPLEVELS  6	// number of entries in the params table
 #define  NPARAMS  5
 
-const double params[NPLEVELS][NPARAMS] =   { 	{100,  5000, 5000,  1 * 32768, 1.3},
-						{120, 11000, 11000, 2 * 32768, 1.3},
-						{140, 25000, 25000, 2 * 32768, 1.3},
-					    	{160, 55000, 55000, 2 * 32768, 1.3}
+const double params[NPLEVELS][NPARAMS] =   { 	{100,  5000,  50, 1 * 131072, 1.4},
+						{120, 11000,  60, 1 * 131072, 1.4},
+						{140, 25000,  70, 1 * 131072, 1.4},
+					    	{160, 55000,  70, 1 * 131072, 1.4},
+						{180, 95000,  75, 1 * 131072, 1.4},
+						{200, 180000, 75, 1 * 131072, 1.4}
 					   };
 
 void set_params (nsieve_t *ns, int p1, int p2, double fac){
 	// -1 indicates that the property was not manually overridden by the user via a command line argument.
 	if (ns->fb_bound == -1) ns -> fb_bound = (uint32_t) (params[p1][PARAM_FBBOUND] * fac + params[p2][PARAM_FBBOUND] * (1 - fac));
-	if (ns->lp_bound == 0){
-		ns->lp_bound = ns->fb_bound;
+	if (ns->lp_bound == -1){
+		ns -> lp_bound = ns->fb_bound * (uint32_t) (params[p1][PARAM_LPBOUND] * fac + params[p2][PARAM_LPBOUND] * (1 - fac));
+	} else {
+		ns -> lp_bound *= ns->fb_bound;
 	}
-	if (ns->lp_bound == -1) ns -> lp_bound = (uint32_t) (params[p1][PARAM_LPBOUND] * fac + params[p2][PARAM_LPBOUND] * (1 - fac));
 	if (ns->M == -1) ns -> M        = (uint32_t) (params[p1][PARAM_M] * fac + params[p2][PARAM_M] * (1 - fac));
 	if (ns->T == -1) ns -> T        = (float)    (params[p1][PARAM_T] * fac + params[p2][PARAM_T] * (1 - fac));
 	printf("Selected parameters: \n\tfb_bound = %d \n\tlp_bound = %d \n\tM = %d\n\tT - %f\n", ns->fb_bound, ns->lp_bound, ns->M, ns->T);
@@ -167,7 +170,6 @@ void factor (nsieve_t *ns){
 	}
 	printf("\nSieving complete. Of %lld sieve locations, %d were trial divided. \n", ns->sieve_locs, ns->tdiv_ct);
 	ns->timing.sieve_time = clock() - start;
-	ns->timing.filter_time = 0;
 	// now we have enough relations, so we build the matrix (combining the partials).
 	
 	combine_partials (ns);
@@ -207,7 +209,7 @@ int main (int argc, const char *argv[]){
 			ns.M = atoi (argv[pos+1]);
 			pos++;
 		} else if (!strcmp(argv[pos], "-np")){
-			ns.lp_bound = 0;
+			ns.lp_bound = 1;
 		} else {
 			mpz_set_str (n, argv[pos], 10);
 			nspecd = 1;
@@ -217,14 +219,17 @@ int main (int argc, const char *argv[]){
 	if (!nspecd){
 		mpz_inp_str (n, stdin, 10);
 	}
-
+	long start = clock();
 	nsieve_init (&ns, n);
 
 	factor (&ns);
+	ns.timing.total_time = clock() - start;
 
 	printf ("\nTiming summary: \
-		 \n\tInitialization:   %ld \
-		 \n\tSieving:          %ld \
-		 \n\tMatrix solving:   %ld \
-		 \n\tFactor deduction: %ld\n", ns.timing.init_time, ns.timing.sieve_time, ns.timing.matsolve_time, ns.timing.facdeduct_time);
+		 \n\tInitialization:   %ldms \
+		 \n\tSieving:          %ldms \
+		 \n\tFiltering:        %ldms \
+		 \n\tMatrix solving:   %ldms \
+		 \n\tFactor deduction: %ldms \
+		 \n\tTOTAL:            %ldms\n", ns.timing.init_time/1000, ns.timing.sieve_time/1000, ns.timing.filter_time/1000, ns.timing.matsolve_time/1000, ns.timing.facdeduct_time/1000, ns.timing.total_time/1000);
 }
