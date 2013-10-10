@@ -69,6 +69,9 @@ const double params[NPLEVELS][NPARAMS] =   { 	{100,  5000, 5000,  1 * 32768, 1.3
 void set_params (nsieve_t *ns, int p1, int p2, double fac){
 	// -1 indicates that the property was not manually overridden by the user via a command line argument.
 	if (ns->fb_bound == -1) ns -> fb_bound = (uint32_t) (params[p1][PARAM_FBBOUND] * fac + params[p2][PARAM_FBBOUND] * (1 - fac));
+	if (ns->lp_bound == 0){
+		ns->lp_bound = ns->fb_bound;
+	}
 	if (ns->lp_bound == -1) ns -> lp_bound = (uint32_t) (params[p1][PARAM_LPBOUND] * fac + params[p2][PARAM_LPBOUND] * (1 - fac));
 	if (ns->M == -1) ns -> M        = (uint32_t) (params[p1][PARAM_M] * fac + params[p2][PARAM_M] * (1 - fac));
 	if (ns->T == -1) ns -> T        = (float)    (params[p1][PARAM_T] * fac + params[p2][PARAM_T] * (1 - fac));
@@ -108,6 +111,8 @@ void nsieve_init (nsieve_t *ns, mpz_t n){
 
 	ns->nfull = 0;
 	ns->npartial = 0;
+	ns->tdiv_ct = 0;
+	ns->sieve_locs = 0;
 	ns->extra_rels = 48;
 
 	generate_fb (ns);
@@ -136,7 +141,7 @@ void factor (nsieve_t *ns){
 //	return;
 	int poly_ct = 0;
 	int pg_ct = 0;
-	while (ns->nfull /*+ ns->npartial*/ < ns->rels_needed){
+	while (ns->nfull + ns->npartial < ns->rels_needed){
 		// while we don't have enough relations, sieve another poly group.
 		poly_group_t *curr_polygroup = (poly_group_t *) malloc(sizeof(poly_group_t));
 		polygroup_init (curr_polygroup, ns);
@@ -154,14 +159,18 @@ void factor (nsieve_t *ns){
 //			printf("We now have %d full relations and %d partials.\nSwitching polynomials..., M = %d\n", ns->nfull, ns->npartial, curr_poly.M);
 		}
 		add_polygroup_relations (curr_polygroup, ns);
+		ns->npartial = ht_count (&ns->partials);
 		pg_ct ++;
 		poly_ct = pg_ct * ns->bvals;
-		printf("Have %d of %d relations; sieved %d polynomials from %d groups. \r", ns->nfull, ns->rels_needed, poly_ct, pg_ct);
+		printf("Have %d of %d relations (%d full + %d combined from %d partial); sieved %d polynomials from %d groups. \r", ns->nfull + ns->npartial, ns->rels_needed, ns->nfull, ns->npartial, ns->partials.nentries, poly_ct, pg_ct);
 		fflush(stdout);
 	}
+	printf("\nSieving complete. Of %lld sieve locations, %d were trial divided. \n", ns->sieve_locs, ns->tdiv_ct);
 	ns->timing.sieve_time = clock() - start;
 	ns->timing.filter_time = 0;
 	// now we have enough relations, so we build the matrix (combining the partials).
+	
+	combine_partials (ns);
 
 	// Filter the matrix to reduce its size without reducing its yummy content. This will accelerate the matrix solving step, and also reduce the memory usage.
 //	filter (ns);
@@ -197,6 +206,8 @@ int main (int argc, const char *argv[]){
 		} else if (!strcmp(argv[pos], "-M")){
 			ns.M = atoi (argv[pos+1]);
 			pos++;
+		} else if (!strcmp(argv[pos], "-np")){
+			ns.lp_bound = 0;
 		} else {
 			mpz_set_str (n, argv[pos], 10);
 			nspecd = 1;

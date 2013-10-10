@@ -125,36 +125,17 @@ void solve_matrix (nsieve_t *ns){
 				if (get_bit (history[row], relnum) == 1){	// the relation numbered 'relnum' is included in the dependency
 					matrel_t *m = &ns->relns[relnum];
 
-					// lhs = lhs * victimH * mH;  if victim poly = p and m poly = q, this is (p.a*victim.x + p.b) * (q.a*m.x + q.b)
-					rel_t *victim = m->r1->poly->group->victim;
-					mpz_set_si (temp, victim->x);
-					mpz_mul (temp, temp, victim->poly->a);
-					mpz_add (temp, temp, victim->poly->b);	// temp = p.a * victim.x + p.b = victim H
-					mpz_mul (lhs, lhs, temp);		// multiply it into the LHS
-
-					mpz_set_si (temp, m->r1->x);
-					mpz_mul (temp, temp, m->r1->poly->a);
-					mpz_add (temp, temp, m->r1->poly->b);	// temp = q.a * m.x + q.b  = mH
-					mpz_mul (lhs, lhs, temp);		// multiply into LHS
-
-					// this is a little bit of a shot in the dark.
-					mpz_invert (temp, victim->poly->a, ns->N);
-					mpz_mul (lhs, lhs, temp);
-
-					mpz_mod (lhs, lhs, ns->N);		// reduce mod N to keep sizes small
-
-					// now update RHS
-					// rhs = rhs * p(victim.x) * q(m.x)
-					poly (temp, victim->poly, victim->x);
-					mpz_mul (rhs, rhs, temp);
-
-					poly (temp, m->r1->poly, m->r1->x);
-					mpz_mul (rhs, rhs, temp);
-
-					// we can't reduce rhs mod N, since we have to take the sqrt of its final value in the integers, not Z/nZ.
-
-					if (m->r2 != NULL){	// then this is a partial and we have more work to do.
+					multiply_in_relation (lhs, rhs, m->r1, ns, 0);
+					if (m->r2 != NULL){	// partial
+						multiply_in_relation (lhs, rhs, m->r2, ns, 1);
+					//	mpz_divexact_ui (rhs, rhs, m->r1->cofactor * m->r1->cofactor);	// divide by the cofactor
+						mpz_set_ui (temp, m->r1->cofactor);
+						mpz_invert (temp, temp, ns->N);
+						mpz_mul (temp, temp, temp);
+						mpz_mul (lhs, lhs, temp);
+						mpz_mod (lhs, lhs, ns->N);
 					}
+					// is this all there is to it?
 
 				}
 			}
@@ -212,5 +193,36 @@ void solve_matrix (nsieve_t *ns){
 			printf (" (c)\n");
 		}
 	}
-	ns->timing.facdeduct_time = clock() - start;
+	ns->timing.facdeduct_time = clock() - start; }
+
+void multiply_in_relation (mpz_t lhs, mpz_t rhs, rel_t *rel, nsieve_t *ns, int partial){	// this should work just as well for partials as for fulls.
+	mpz_t temp;
+	mpz_init (temp);
+
+	rel_t *victim = rel->poly->group->victim;
+
+	// lhs *= victimH * relH;  if victim poly = p and rel poly = q, this is (p.a * victim.x + p.b) * (q.a * rel.x + q.b)
+	mpz_set_si (temp, victim->x);
+	mpz_mul (temp, temp, victim->poly->a);
+	mpz_add (temp, temp, victim->poly->b);
+	mpz_mul (lhs, lhs, temp);
+
+	mpz_set_si (temp, rel->x);
+	mpz_mul (temp, temp, rel->poly->a);
+	mpz_add (temp, temp, rel->poly->b);
+	mpz_mul (lhs, lhs, temp);
+
+	mpz_invert (temp, victim->poly->a, ns->N);
+	mpz_mul (lhs, lhs, temp);
+
+	mpz_mod (lhs, lhs, ns->N);
+
+	// now update RHS
+	// rhs *= p(victim.x) * q(rel.x)
+	poly (temp, victim->poly, victim->x);
+	mpz_mul (rhs, rhs, temp);
+
+	poly (temp, rel->poly, rel->x);
+	mpz_mul (rhs, rhs, temp);
+	// note that we can't reduce rhs mod N, since we have to take the sqrt of its final value in the integers.
 }

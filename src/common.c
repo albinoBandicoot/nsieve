@@ -70,6 +70,7 @@ void print_row (uint64_t *m, int max_i){
 void ht_init (nsieve_t *ns){			// allocates space for and initializes the hashtable stored in the nsieve_t.
 	ns->partials.nbuckets = 5483;	// make some educated choice about this in the future. It should be prime.
 	ns->partials.buckets = (ht_entry_t **)(calloc(5483, sizeof(ht_entry_t*)));	// allocate and clear them so they're all NULL to start off.
+	ns->partials.nentries = 0;
 }
 
 uint32_t hash_partial (uint32_t cofactor){	// hashes the cofactor of a partial relation for determining its bucket in the hashtable. 
@@ -79,19 +80,36 @@ uint32_t hash_partial (uint32_t cofactor){	// hashes the cofactor of a partial r
 /* We want to keep the lists sorted. This makes the counting much easier, and is not much extra trouble or computational expense */
 void ht_add (hashtable_t *ht, rel_t *rel){	// add rel to the hashtable
 	uint32_t slot = hash_partial (rel->cofactor) % ht->nbuckets;
+//	if (ht->buckets[slot] != NULL) printf("Adding rel to bucket %d with cofactor = %d to bucket. bucket[0] cofactor is %d\n", slot, rel->cofactor, ht->buckets[slot]->rel->cofactor);
+	ht->nentries ++;
 	if (ht->buckets[slot] == NULL){
-		ht->buckets[slot]->rel = rel;
-		ht->buckets[slot]->next = NULL;
+//		printf("-- making it as first element\n");
+		ht_entry_t *newentry = (ht_entry_t *) malloc(sizeof(ht_entry_t));
+		newentry -> rel = rel;
+		newentry -> next = NULL;
+		ht->buckets[slot] = newentry;
 		return;
 	}
-	// this is a work in progress
 	ht_entry_t *rover = ht->buckets[slot];
+	if (rel->cofactor < rover->rel->cofactor){	// insert at beginning, which is a little different since we have to modify one of the buckets.
+//		printf("-- adding to start\n");
+		ht_entry_t *newentry = (ht_entry_t *) malloc(sizeof(ht_entry_t));
+		newentry -> rel = rel;
+		newentry -> next = rover;
+		ht->buckets[slot] = newentry;
+		return;
+	}
 	ht_entry_t *trailer = rover;
-	while (rover != NULL && rel->cofactor < rover->rel->cofactor){
+	rover = rover->next;
+	while (rover != NULL && rel->cofactor > rover->rel->cofactor){
 		trailer = rover;
 		rover = rover->next;
+		if (rover != NULL){
+//			printf(" - advancing; will now compare against %d\n", rover->rel->cofactor);
+		}
 	}
 	// we want to insert right after trailer and before rover.
+//	printf(" -- adding\n");
 	ht_entry_t *newentry = (ht_entry_t *) malloc (sizeof(ht_entry_t));
 	newentry -> rel = rel;
 	newentry -> next = rover;	// this even works if rover is NULL (we are appending to the list)

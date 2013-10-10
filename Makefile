@@ -6,33 +6,34 @@ vpath %.c src/
 vpath %.o build/
 
 OBJECTS= build/*.o
+HEADERS= src/*.h
 
-all: nsieve numgen prcheck tdiv
+all: nsieve bin/numgen bin/prcheck bin/tdiv
 
-prcheck: prcheck.c
+bin/prcheck: prcheck.c
 	$(CC) $(CFLAGS) -o bin/prcheck src/prcheck.c -lgmp
 
-numgen: numgen.c
+bin/numgen: numgen.c
 	$(CC) $(CFLAGS) -o bin/numgen src/numgen.c -lgmp
 
-tdiv: tdiv.c
+bin/tdiv: tdiv.c
 	$(CC) $(CFLAGS) -o bin/tdiv src/tdiv.c -lgmp
 
 nsieve: poly.o sieve.o common.o filter.o nsieve.o matrix.o
 	ar rc build/libnsieve.a ${OBJECTS} 
 	$(CC) $(CFLAGS) -o bin/nsieve src/nsieve.c -Lbuild/ -lnsieve -lgmp -lm
 
-poly.o:	poly.c poly.h 
+poly.o:	poly.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o build/poly.o src/poly.c 
-sieve.o: sieve.c sieve.h 
+sieve.o: sieve.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o build/sieve.o src/sieve.c 
-common.o: common.c common.h
+common.o: common.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o build/common.o src/common.c
-filter.o: filter.c filter.h 
+filter.o: filter.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o build/filter.o src/filter.c 
-nsieve.o: nsieve.c nsieve.h 
+nsieve.o: nsieve.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o build/nsieve.o src/nsieve.c 
-matrix.o: matrix.c matrix.h 
+matrix.o: matrix.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o build/matrix.o src/matrix.c
 
 clean:

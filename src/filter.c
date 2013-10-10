@@ -15,34 +15,30 @@ void build_matrix (nsieve_t * ns){
 
 void combine_bucket (ht_entry_t *h, nsieve_t *ns){
 	if (h == NULL) return;
-//	mpz_t cofi;
-//	mpz_init (cofi);
 	while (1){
 		rel_t *base_rel = h->rel;
 		uint64_t base_factors[ns->row_len];
 		fb_factor_rel (base_rel, &base_factors[0], ns);
-		// now compute (cofactor ^ -1) (mod N)
-//		mpz_set_ui (cofi, base_rel->cofactor);
-//		mpz_invert (cofi, cofi, ns->N);
 
 		h = h->next;	// skip past the base rel.
 		while (h != NULL && base_rel->cofactor == h->rel->cofactor){
+//			printf("Making combined rel with base cof = %d and h cof = %d\n", base_rel->cofactor, h->rel->cofactor);
 			// any h inside this loop creates another combined relation.
 			matrel_t *m = &ns->relns[ns->nfull];
 			m -> r1 = base_rel;
 			m -> r2 = h -> rel;
 			fb_factor_rel (h->rel, m->row, ns);
 			xor_row (m->row, &base_factors[0], ns->row_len);	// multiply the factorizations together.
+			xor_row (m->row, base_rel->poly->group->victim_factors, ns->row_len);	// and since this hasn't been done yet, multiply
+			xor_row (m->row, m->r2->poly->group->victim_factors, ns->row_len);		// in their corresponding victims.
 			ns->nfull ++;
 			if (ns -> nfull >= ns -> rels_needed){
-//				mpz_clear(cofi);
 				return;
 			}
 
 			h = h->next;
 		}
 		if (h == NULL){
-//		       mpz_clear(cofi);
 		       return;
 		}
 	}
@@ -50,6 +46,10 @@ void combine_bucket (ht_entry_t *h, nsieve_t *ns){
 
 void combine_partials (nsieve_t *ns){
 	for (int i=0; i < ns->partials.nbuckets; i++){
+		if (i % 100 == 0){
+			printf("Combining bucket %d\r", i);
+			fflush(stdout);
+		}
 		if (ns->nfull >= ns->rels_needed){
 			return;
 		}

@@ -8,6 +8,9 @@ void polygroup_init (poly_group_t *pg, nsieve_t *ns){
 	pg->nrels = 0;
 	pg->victim = NULL;
 	pg->victim_factors = (uint64_t *) calloc (ns->row_len, sizeof(uint64_t));
+	if (pg->victim_factors == NULL){	// memory allocation failed
+		printf("Fatal error - allocation of victim_factors (size %d) failed.\n", ns->row_len * 8);
+	}
 	for (int i=0; i < ns->bvals; i++){
 		mpz_init (pg->bvals[i]);
 	}
