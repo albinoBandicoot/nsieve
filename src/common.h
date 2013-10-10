@@ -33,6 +33,8 @@ typedef struct {
 	mpz_t a;
 	mpz_t b;
 	mpz_t c;
+	uint32_t *offsets1;	// the actual offsets of -M.
+	uint32_t *offsets2;	// (for the other root)
 	uint32_t *bmodp;	// for each prime p in the factor base, we compute b mod p. This accelerates the sieving, since we may do multiple
 				// blocks on each polynomial. This array can (and should) be freed after the polynomial is sieved.
 	uint32_t M;	// we compute this on a per-polynomial basis. The value we store is rounded to the nearest multiple of BLOCKSIZE.
@@ -142,6 +144,7 @@ uint32_t ht_count (hashtable_t *ht);		// counts the number of full relations tha
 /* Generic auxillary functions */ 
 
 uint32_t find_root (mpz_t a, uint32_t p);	// finds modular square root of a (mod p)
+uint32_t mod (int x, uint32_t p);
 uint64_t mpz_get_64 (mpz_t a);
 int mpz_fits_64 (mpz_t a);
 //uint32_t find_root_ui (uint32_t a, uint32_t p);

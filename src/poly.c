@@ -275,6 +275,8 @@ void generate_polygroup (poly_gpool_t *gp, poly_group_t *pg, nsieve_t *ns){
 	mpz_clears (p, temp, NULL);
 }
 
+extern uint32_t get_offset (uint32_t, int, int, int, poly_t *, poly_group_t *, nsieve_t *);
+
 void generate_poly (poly_t *p, poly_group_t *pg, nsieve_t *ns, int i){
 	p->group = pg;
 
@@ -294,9 +296,13 @@ void generate_poly (poly_t *p, poly_group_t *pg, nsieve_t *ns, int i){
 	p->M = (p->M / BLOCKSIZE + 1) * BLOCKSIZE;
 	// compute -B % p for each prime in the factor base.
 	p -> bmodp = (uint32_t *) malloc (ns->fb_len * sizeof(uint32_t));
+//	p -> offsets1 = (uint32_t *) malloc (ns->fb_len * sizeof(uint32_t));
+//	p -> offsets2 = (uint32_t *) malloc (ns->fb_len * sizeof(uint32_t));
 	for (int i=0; i < ns->fb_len; i++){
 		mpz_neg (temp, p->b);
 		p->bmodp[i] = mpz_mod_ui (temp, temp, ns->fb[i]);
+//		p->offsets1[i] = get_offset (ns->fb[i], i, -p->M, 0, p, p->group, ns);
+//		p->offsets2[i] = get_offset (ns->fb[i], i, -p->M, 1, p, p->group, ns);
 	}
 	mpz_clear(temp);
 }

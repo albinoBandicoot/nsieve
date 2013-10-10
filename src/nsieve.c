@@ -48,6 +48,9 @@ void generate_fb (nsieve_t *ns){
 	ns->fb_logs = (uint8_t *)(malloc(ns->fb_len * sizeof(uint8_t)));
 	for (int i=0; i<ns->fb_len; i++){
 		ns->roots[i] = find_root (ns->N, ns->fb[i]);	// see common.c for the implementation of this method.
+		if (ns->roots[i] > ns->fb[i]/2){
+			ns->roots[i] = ns->fb[i] - ns->roots[i];	// normalize these to be the smaller of the two roots.
+		}
 		// note that there are actually 2 square roots; however, the second may be obtained readily as p - sqrt#1, so only one is stored.
 		ns->fb_logs[i] = fast_log (ns->fb[i]);
 	}
@@ -119,7 +122,7 @@ void nsieve_init (nsieve_t *ns, mpz_t n){
 	ns->npartial = 0;
 	ns->tdiv_ct = 0;
 	ns->sieve_locs = 0;
-	ns->extra_rels = 48;
+	ns->extra_rels = 120;
 
 	generate_fb (ns);
 
@@ -235,4 +238,5 @@ int main (int argc, const char *argv[]){
 		 \n\tMatrix solving:   %ldms \
 		 \n\tFactor deduction: %ldms \
 		 \n\tTOTAL:            %ldms\n", ns.timing.init_time/1000, ns.timing.sieve_time/1000, ns.timing.filter_time/1000, ns.timing.matsolve_time/1000, ns.timing.facdeduct_time/1000, ns.timing.total_time/1000);
+
 }

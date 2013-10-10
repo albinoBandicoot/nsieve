@@ -146,6 +146,7 @@ uint32_t ht_count (hashtable_t *ht){		// counts the number of full relations tha
 
 /* Generic auxillary functions */
 
+#define POCKLINGTON
 uint32_t find_root (mpz_t k, uint32_t p){	// finds modular square root of k (mod p)
 	// for now we just do the stupid brute force thing. This will be replaced later with some of the modular
 	// exponentiation algorithms (for certain cases), and perhaps the Tonelli-Shanks algorithm for the remaining case.
@@ -155,6 +156,7 @@ uint32_t find_root (mpz_t k, uint32_t p){	// finds modular square root of k (mod
 	mpz_mod_ui (temp, k, p);
 	uint32_t a = mpz_get_ui (temp);
 	uint32_t res = 0;
+#ifdef POCKLINGTON
 	// This Pocklington code is stolen from my previous quadratic sieve implementation.
 	if (p % 4 == 3){	// use Case 1 of Pocklington's algorithm.
 		uint32_t m = p/4;
@@ -188,6 +190,7 @@ uint32_t find_root (mpz_t k, uint32_t p){	// finds modular square root of k (mod
 
 	mpz_clears (pol, temp, temp2, NULL);
 
+#endif
 	uint32_t t = 0;
 	while ( t*t % p != a && t < p/2 + 1 ){
 		t ++;
@@ -195,6 +198,17 @@ uint32_t find_root (mpz_t k, uint32_t p){	// finds modular square root of k (mod
 	if (t*t%p == a) return t;
 	return -1;	// this should not happen, since we should only be calling this once we've confirmed (a/p) = 1.
 }
+
+inline uint32_t mod (int32_t x, uint32_t p){	// compute x (mod p), according to the mathematical definition.
+	if (x > 0){
+		return x % p;
+	} else {
+		uint32_t z = p + (x % p);
+		if (z == p) return 0;
+		return z;
+	}
+}
+
 
 int mpz_fits_64 (mpz_t a){
 	return mpz_sizeinbase (a, 2) < 63;	// play this safe.

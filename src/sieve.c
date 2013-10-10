@@ -6,7 +6,9 @@ void sieve_poly (block_data_t *data, poly_group_t *pg, poly_t *p, nsieve_t *ns){
 		sieve_block (data, pg, p, ns, -p->M + i * BLOCKSIZE);
 		ns->sieve_locs += BLOCKSIZE;
 	}
-	free (p->bmodp);	// free these temporary precomputed values.
+//	free (p->bmodp);	// free these temporary precomputed values.
+//	free (p->offsets1);
+//	free (p->offsets2);
 }
 
 
@@ -29,8 +31,7 @@ void add_polygroup_relations (poly_group_t *pg, nsieve_t *ns){
 		// factor victim over the fb:
 		mpz_t temp;
 		mpz_init (temp);
-		poly (temp, pg->victim->poly, pg->victim->x);
-		fb_factor (temp, pg->victim_factors, ns);
+		fb_factor_rel(pg->victim, pg->victim_factors, ns);
 		mpz_clear (temp);
 		// now we will loop through the relations. For each full relation, we construct a matrel_t for it, and fill in the 
 		// row (multiplying (xor-ing) by the victim). The partials will have this done to them whenever they are added to
@@ -75,6 +76,24 @@ void mpz_sub_si (mpz_t res, mpz_t a, int32_t x){
 	}
 }
 
+inline uint32_t get_offset (uint32_t p, int32_t i, int block_start, int rn, poly_t *q, poly_group_t *pg, nsieve_t *ns){
+	int64_t z = q->bmodp[i];
+	if (rn == 0){
+		z += ns->roots[i];
+	} else {
+		z += p - ns->roots[i];
+	}
+	z *= pg->ainverses[i];
+	z -= block_start;
+	if (z < 0){
+		z = p + (z % p);
+		if (z == p) z = 0;
+	} else {
+		z %= p;
+	}
+	return (uint32_t) z;
+}
+
 //#define CHECK		// define this to check to make sure p | Q(x) when it should. It slows things down a LOT, and should only be used for debugging.
 /* This is the real heart of the Quadratic Sieve. */
 void sieve_block (block_data_t *data, poly_group_t *pg, poly_t *q, nsieve_t *ns, int block_start){
@@ -110,6 +129,9 @@ void sieve_block (block_data_t *data, poly_group_t *pg, poly_t *q, nsieve_t *ns,
 		*/
 		// we should really get rid of this multiprecision code here and precompute the b % p, so then
 		// everything fits in 4 bytes.
+//		uint32_t z = mod(q->offsets1[i] - (q->M + block_start),  p);
+		uint32_t z = get_offset (p, i, block_start, 0, q, pg, ns);
+		/*
 		int64_t z = ns->roots[i] + q->bmodp[i];	// this is a + here because we actually precomputed -b % p.
 							// this has to be 64 bits, as the intermediate values could get above 2^32 easily.
 		z *= pg->ainverses[i];
@@ -119,6 +141,7 @@ void sieve_block (block_data_t *data, poly_group_t *pg, poly_t *q, nsieve_t *ns,
 		} else {
 			z %= p;
 		}
+		*/
 		/*
 		mpz_set_ui (temp, ns->roots[i]);
 		mpz_sub (temp, temp, q->b);
@@ -142,7 +165,9 @@ void sieve_block (block_data_t *data, poly_group_t *pg, poly_t *q, nsieve_t *ns,
 
 		// now do the other root (p - ns->roots[i])
 		if (p == 2) continue;	// there's only one root of 2, so continuing would erroneously duplicate the sieve on p=2.
-
+//		z = mod(q->offsets2[i] - (q->M + block_start), p); 
+		z = get_offset (p, i, block_start, 1, q, pg, ns);
+/*
 		z = p - ns->roots[i] + q->bmodp[i];
 		z *= pg->ainverses[i];
 		z -= block_start;
@@ -151,6 +176,7 @@ void sieve_block (block_data_t *data, poly_group_t *pg, poly_t *q, nsieve_t *ns,
 		} else {
 			z %= p;
 		}
+		*/
 		/*
 		mpz_set_ui (temp, p - ns->roots[i]);
 		mpz_sub (temp, temp, q->b);
@@ -227,17 +253,13 @@ void extract_relations (block_data_t *data, poly_group_t *pg, poly_t *p, nsieve_
 #endif
 }
 
+/* NOTE WELL: This routine assumes x factors over the factor base. Cofactors are divided out ahead of time */
 void fb_factor_rel (rel_t *rel, uint64_t *row, nsieve_t *ns){
 	mpz_t x;
 	mpz_init (x);
 	poly (x, rel->poly, rel->x);
 	mpz_divexact_ui(x, x, rel->cofactor);
-	fb_factor (x, row, ns);
-	mpz_clear (x);
-}
 
-/* NOTE WELL: This routine assumes x factors over the factor base. Cofactors are divided out ahead of time in fb_factor_rel */
-void fb_factor (mpz_t x, uint64_t *row, nsieve_t *ns){
 	clear_row (row, ns);
 	if (mpz_cmp_ui(x, 0) < 0){
 		mpz_neg (x,x);
@@ -245,18 +267,29 @@ void fb_factor (mpz_t x, uint64_t *row, nsieve_t *ns){
 	}
 	uint64_t q;
 	int i;
-	for (i=0; i < ns->fb_len; i++){
-		while (mpz_divisible_ui_p(x, ns->fb[i])){
-			mpz_divexact_ui(x, x, ns->fb[i]);
+	while (mpz_divisible_ui_p(x, 2)){
+		mpz_divexact_ui(x, x, 2);
+		flip_bit (row, 1);
+	}
+	for (i=1; i < ns->fb_len; i++){
+		if (ns->fb[i] >= rel->poly->group->gvals[0] && ns->fb[i] <= rel->poly->group->gvals[ns->k-1]) goto mainloop;	// we don't know if the values in this range will divide or not, so we go to the standard loop without the initial divide.
+		if (get_offset (ns->fb[i], i, rel->x, 0, rel->poly, rel->poly->group, ns) == 0 || get_offset (ns->fb[i], i, rel->x,  1, rel->poly, rel->poly->group, ns) == 0){
+			mpz_divexact_ui (x, x, ns->fb[i]);
 			flip_bit (row, i+1);
-			if (mpz_fits_64 (x)){
-				goto fp_tdiv;
+			if (mpz_fits_64 (x)) goto fp_tdiv;
+mainloop:
+			while (mpz_divisible_ui_p(x, ns->fb[i])){
+				mpz_divexact_ui(x, x, ns->fb[i]);
+				flip_bit (row, i+1);
+				if (mpz_fits_64 (x)){
+					goto fp_tdiv;
+				}
 			}
 		}
 	}
 fp_tdiv:
-
 	q = mpz_get_64 (x);
+	mpz_clear(x);
 	while (i < ns->fb_len){
 		while (q % ns->fb[i] == 0){
 			q /= ns->fb[i];
@@ -302,6 +335,7 @@ fp_tdiv:
 /* Allocates the rel_t object, and adds it to the list in the polygroup if it factored or was a partial.
  * The trial division here is solely to determine if it actually factors; it does not fill in the matrix rows.
 */
+
 void construct_relation (mpz_t qx, int32_t x, poly_t *p, nsieve_t *ns){
 	ns->tdiv_ct ++;
 	rel_t *rel = (rel_t *)(malloc(sizeof(rel_t)));
@@ -310,11 +344,19 @@ void construct_relation (mpz_t qx, int32_t x, poly_t *p, nsieve_t *ns){
 	mpz_abs(qx, qx);
 	uint64_t q = 0;
 	int i;
-	for (i=0; i < ns->fb_len; i++){
-		while (mpz_divisible_ui_p (qx, ns->fb[i])){
+	while (mpz_divisible_ui_p(qx, 2)){
+		mpz_divexact_ui(qx, qx, 2);
+	}
+	for (i=1; i < ns->fb_len; i++){
+		if (get_offset (ns->fb[i], i, x, 0, p, p->group, ns) == 0 || get_offset (ns->fb[i], i, x, 1, p, p->group, ns) == 0){
+//		if ((p->offsets1[i] -(p->M + x)) % ns->fb[i] == 0 || (p->offsets2[i] -(p->M + x)) % ns->fb[i] == 0){
 			mpz_divexact_ui(qx, qx, ns->fb[i]);
-			if (mpz_fits_64 (qx)){	// we don't need to test for anything else here - all the relevant cases happen only when qx is well under 2^64.
-				goto fixedprec_tdiv;
+			if (mpz_fits_64 (qx)) goto fixedprec_tdiv;
+			while (mpz_divisible_ui_p (qx, ns->fb[i])){
+				mpz_divexact_ui(qx, qx, ns->fb[i]);
+				if (mpz_fits_64 (qx)){	// we don't need to test for anything else here - all the relevant cases happen only when qx is well under 2^64.
+					goto fixedprec_tdiv;
+				}
 			}
 		}
 	}
