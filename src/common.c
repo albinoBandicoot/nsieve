@@ -195,3 +195,21 @@ uint32_t find_root (mpz_t k, uint32_t p){	// finds modular square root of k (mod
 	if (t*t%p == a) return t;
 	return -1;	// this should not happen, since we should only be calling this once we've confirmed (a/p) = 1.
 }
+
+int mpz_fits_64 (mpz_t a){
+	return mpz_sizeinbase (a, 2) < 63;	// play this safe.
+}
+
+uint64_t mpz_get_64 (mpz_t a){
+	if (mpz_fits_ulong_p (a)){
+		return (uint64_t) mpz_get_ui(a);
+	}
+	uint64_t res = 0;
+	if (sizeof(mp_limb_t) == 4){
+		res = mpz_getlimbn (a, 1);
+		res = (res << 32) | mpz_getlimbn(a, 0);
+	} else {
+		res = mpz_getlimbn (a, 0);
+	}
+	return res;
+}

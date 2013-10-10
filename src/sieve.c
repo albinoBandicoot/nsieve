@@ -227,39 +227,75 @@ void extract_relations (block_data_t *data, poly_group_t *pg, poly_t *p, nsieve_
 #endif
 }
 
-int fb_factor_rel (rel_t *rel, uint64_t *row, nsieve_t *ns){
+void fb_factor_rel (rel_t *rel, uint64_t *row, nsieve_t *ns){
 	mpz_t x;
 	mpz_init (x);
 	poly (x, rel->poly, rel->x);
 	mpz_divexact_ui(x, x, rel->cofactor);
-	int rval = fb_factor (x, row, ns);
+	fb_factor (x, row, ns);
 	mpz_clear (x);
-	return rval;
 }
 
-int fb_factor (mpz_t x, uint64_t *row, nsieve_t *ns){	// returns 0 if factors completely. At the end, x contains the unfactored portion.
+/* NOTE WELL: This routine assumes x factors over the factor base. Cofactors are divided out ahead of time in fb_factor_rel */
+void fb_factor (mpz_t x, uint64_t *row, nsieve_t *ns){
 	clear_row (row, ns);
 	if (mpz_cmp_ui(x, 0) < 0){
 		mpz_neg (x,x);
 		flip_bit (row, 0);
 	}
-	for (int i=0; i < ns->fb_len; i++){
+	uint64_t q;
+	int i;
+	for (i=0; i < ns->fb_len; i++){
 		while (mpz_divisible_ui_p(x, ns->fb[i])){
 			mpz_divexact_ui(x, x, ns->fb[i]);
 			flip_bit (row, i+1);
-			if (mpz_cmp_ui(x, ns->fb[i]*ns->fb[i]) < 0){
-				if (mpz_cmp_ui(x, 1) == 0){
-					return 0;
-				} else {
-					// then x must be prime (note that this presumes the factor base is correctly constructed)
-					if (mpz_cmp_ui(x, ns->fb_bound) > 0){	// and it's outside the factor base
-						return -1;
-					}
-				}
+			if (mpz_fits_64 (x)){
+				goto fp_tdiv;
 			}
 		}
 	}
-	return -1;
+fp_tdiv:
+
+	q = mpz_get_64 (x);
+	while (i < ns->fb_len){
+		while (q % ns->fb[i] == 0){
+			q /= ns->fb[i];
+			flip_bit (row, i+1);
+			if (q < ns->fb[i] * ns->fb[i]){
+				if (q == 1) return;
+				if (q < ns->fb_bound){	// q is a prime in the factor base.
+					// here we do binary search to find the index of q.
+					int high = ns->fb_len - 1;
+					int low = i;
+					int guess = (high + low) / 2;
+					if (q < ns->fb[low] || q > ns->fb[high]){
+						printf("Q OUT OF RANGE AAAAH!\n");
+					}
+					while (high - low > 1){
+						if (ns->fb[guess] < q){
+							low = guess;
+							guess = (high + low) / 2;
+						} else if (ns->fb[guess] > q){
+							high = guess;
+							guess = (high + low) / 2;
+						} else {
+							flip_bit (row, guess + 1);
+							return;
+						}
+					}
+					for (guess = low; guess <= high; guess++){
+						if (q == ns->fb[guess]){
+							flip_bit (row, guess + 1);
+							return;
+						}
+					}
+					printf("UH OH BAD BAD.\n");
+					return;
+				}
+			}
+		}
+		i++;
+	}
 }
 
 
@@ -272,33 +308,44 @@ void construct_relation (mpz_t qx, int32_t x, poly_t *p, nsieve_t *ns){
 	rel->poly = p;
 	rel->x = x;
 	mpz_abs(qx, qx);
-	for (int i=0; i < ns->fb_len; i++){
+	uint64_t q = 0;
+	int i;
+	for (i=0; i < ns->fb_len; i++){
 		while (mpz_divisible_ui_p (qx, ns->fb[i])){
 			mpz_divexact_ui(qx, qx, ns->fb[i]);
-			if (mpz_cmp_ui(qx, ns->fb[i] * ns->fb[i]) < 0){
-				break;
+			if (mpz_fits_64 (qx)){	// we don't need to test for anything else here - all the relevant cases happen only when qx is well under 2^64.
+				goto fixedprec_tdiv;
 			}
 		}
 	}
-	if (mpz_cmp_ui(qx, 1) == 0){
-		if (p->group->nrels < PG_REL_STORAGE){
-//			printf("Adding full relation; x = %d to position %d\n", x, p->group->nrels);
-			rel->cofactor = 1;
-			p->group->relns[ p->group->nrels ] = rel;
-			p->group->nrels ++;
-			return;
-		}
-	} else {
-		if (mpz_cmp_ui(qx, ns->lp_bound) < 0){
-			if (ns->fb_bound*ns->fb_bound < ns->lp_bound || mpz_probab_prime_p(qx, 10)){	// if lp_bound < fb_bound^2, this primality test could be omitted.
-				rel->cofactor = mpz_get_ui(qx);
-				// here we don't need to add it to the p->group->nrels, since we are deferring multiplying by the victim & creating a matrow 
-				// element until we actually know which partials are going to be useful. Hence we just stuff it in the hashtable.
-				ht_add (&ns->partials, rel);
-				return;
+fixedprec_tdiv:
+	q = mpz_get_64 (qx);
+	if (q < ns->fb[i] * ns->fb[i]){
+		if (q < ns->fb_bound) goto add_full_rel;
+		if (q < ns->lp_bound) goto add_partial_rel;
+	}
+	while (i < ns->fb_len){
+		while (q % ns->fb[i] == 0){
+			q /= ns->fb[i];
+			if (q < ns->fb[i] * ns->fb[i]){
+				if (q < ns->fb_bound) goto add_full_rel;
+				if (q < ns->lp_bound) goto add_partial_rel;
 			}
 		}
+		i++;
 	}
 	// if we're here, we weren't able to do anything with this relation.
 	free (rel);
+	return;
+
+add_full_rel:
+	rel->cofactor = 1;
+	p->group->relns[ p->group->nrels ] = rel;
+	p->group->nrels ++;
+	return;
+add_partial_rel:
+	rel->cofactor = q;
+	ht_add (&ns->partials, rel);
+	return;
+
 }
