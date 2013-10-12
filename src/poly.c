@@ -89,7 +89,7 @@ void gpool_init (poly_gpool_t *gp, nsieve_t *ns){
 
 	mpz_mul_ui    (aopt, ns->N, 2);
 	mpz_sqrt      (aopt, aopt);
-	mpz_tdiv_q_ui (aopt, aopt, ns->M);	// yay, aopt = sqrt(2N)/M.
+	mpz_tdiv_q_ui (aopt, aopt, ns->M * BLOCKSIZE / 2);	// yay, aopt = sqrt(2N)/M.
 
 	int c_num = 6;
 	int c_den = 10;	// c = 0.6
@@ -292,8 +292,15 @@ void generate_poly (poly_t *p, poly_group_t *pg, nsieve_t *ns, int i){
 	mpz_mul_ui(temp, ns->N, 2);
 	mpz_sqrt(temp, temp);
 	mpz_tdiv_q(temp, temp, p->a);
+	p->M = ns->M;
+	/*
 	p->M = mpz_get_ui(temp);
-	p->M = (p->M / BLOCKSIZE + 1) * BLOCKSIZE;
+	if (p->M <= 0.5 * BLOCKSIZE){	// p->M will store the NUMBER OF BLOCKS TOTAL to sieve.
+		p->M = 1;
+	} else {
+		p->M = (2 *p->M / BLOCKSIZE);
+	}
+	*/
 	// compute -B % p for each prime in the factor base.
 	p -> bmodp = (uint32_t *) malloc (ns->fb_len * sizeof(uint32_t));
 //	p -> offsets1 = (uint32_t *) malloc (ns->fb_len * sizeof(uint32_t));

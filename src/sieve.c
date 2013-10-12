@@ -2,8 +2,11 @@
 
 /* Sieve an entire polynomial */
 void sieve_poly (block_data_t *data, poly_group_t *pg, poly_t *p, nsieve_t *ns){
-	for (int i=0; i < 2*p->M/BLOCKSIZE; i++){
-		sieve_block (data, pg, p, ns, -p->M + i * BLOCKSIZE);
+	int start = (p->M * BLOCKSIZE / 2);
+	start = -start;
+	int i = 0;
+	for (i=0; i < p->M; i++){
+		sieve_block (data, pg, p, ns, start + i * BLOCKSIZE);
 		ns->sieve_locs += BLOCKSIZE;
 	}
 //	free (p->bmodp);	// free these temporary precomputed values.
