@@ -25,6 +25,6 @@ RETURN:
 	ret
 	
 _bitscan:
-	bsf	%eax, %edi
+	bsf	%edi, %eax
 	ret
 	

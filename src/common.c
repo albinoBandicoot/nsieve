@@ -161,6 +161,7 @@ uint32_t ht_count (hashtable_t *ht){		// counts the number of full relations tha
 /* Generic auxillary functions */
 
 #define POCKLINGTON
+#define TONELLI_SHANKS
 uint32_t find_root (mpz_t k, uint32_t p){	// finds modular square root of k (mod p)
 	// for now we just do the stupid brute force thing. This will be replaced later with some of the modular
 	// exponentiation algorithms (for certain cases), and perhaps the Tonelli-Shanks algorithm for the remaining case.
@@ -169,6 +170,9 @@ uint32_t find_root (mpz_t k, uint32_t p){	// finds modular square root of k (mod
 
 	mpz_mod_ui (temp, k, p);
 	uint32_t a = mpz_get_ui (temp);
+	if (p == 2){
+		return a;
+	}
 	uint32_t res = 0;
 #ifdef POCKLINGTON
 	// This Pocklington code is stolen from my previous quadratic sieve implementation.
@@ -202,9 +206,83 @@ uint32_t find_root (mpz_t k, uint32_t p){	// finds modular square root of k (mod
 	}
 	// otherwise, do brute force.
 
-	mpz_clears (pol, temp, temp2, NULL);
+#endif
+
+#ifdef TONELLI_SHANKS
+	/* Based on algorithm description on programmingpraxis.com/2012/11/23/tonelli-shanks-algorithm/ */
+	/* Write p as s * 2^e + 1, for the largest possible such e. We seek sqrt(a) (mod p). 
+	 * Find n such that n^((p-1)/2) ~= -1 (mod p)	(do this by trial and error until one is found, starting with n=2)
+	 * Then set x = a^((s+1)/2) % p,
+	 * 	    b = a^s % p
+	 * 	    g = n^s % p
+	 * 	    r = e.
+	 * (1) Now find the smallest m >= 0 such that b^2^m = 1 (mod p). 
+	 * If m = 0, the algorithm terminates: output x. Otherwise set
+	 * 	x = x * g^2^(r-m-1) (mod p)
+	 * 	b = b * g^2^(r-m)   (mod p)
+	 * 	g = g^2^(r-m)	    (mod p)
+	 * 	r = m
+	 * and goto (1).
+	*/
+	uint32_t s = p-1;
+	uint32_t e = 0;
+	while (s % 2 == 0){
+		s /= 2;
+		e ++;
+	}
+	mpz_set_ui (pol, p);	// this will just hold a mpz version of p.
+	// find a suitable n...
+	mpz_set_ui(temp2, 2);
+	mpz_powm_ui (temp, temp2, (p-1)/2, pol);
+	while (mpz_cmp_ui (temp, p-1) != 0){
+		mpz_add_ui (temp2, temp2, 1);
+		mpz_powm_ui (temp, temp2, (p-1)/2, pol);
+	}
+	// temp2 now contains a suitable n.
+	
+	mpz_t x, b, g;
+	mpz_inits (x, b, g, NULL);
+	mpz_set_ui (temp, a);
+	mpz_powm_ui (x, temp, (s+1)/2, pol);	// x = a^((s+1)/2) mod p
+	mpz_powm_ui (b, temp, s, pol);		// b = a^s mod p
+	mpz_powm_ui (g, temp2, s, pol);		// g = n^s mod p
+	uint32_t r = e;
+	
+	// now the main loop begins. We will use temp2 to hold b^2^m, since we don't need n anymore.
+	uint32_t m;
+tshanks_mainloop:
+	m = 0;
+	mpz_set (temp, b);	// temp = b^2^0 = b^1 = b
+	while (mpz_cmp_ui (temp, 1) != 0){
+		mpz_mul (temp, temp, temp);
+		mpz_mod (temp, temp, pol);
+		m++;
+	}
+	if (m == 0){
+		// we're done; output x.
+		uint32_t res = mpz_get_ui (x);
+		mpz_clears (x, b, g, pol, temp, temp2, NULL);
+		return res;
+	} else {
+		// x *= g^2^(r-m-1)
+		// b *= g^2^(r-m)
+		// g  = g^2^(r-m)
+		// r  = m
+		mpz_ui_pow_ui (temp, 2, r-m-1);
+		mpz_powm (temp, g, temp, pol);	// temp = g^2^(r-m-1)
+		mpz_mul (x, x, temp);		// multiply in to x
+		mpz_mod (x, x, pol);
+		mpz_mul (temp, temp, temp);	// temp now = g^2^(r-m)
+		mpz_mod (temp, temp, pol);	// reduce mod p
+		mpz_mul (b, b, temp);		// multiply in to b
+		mpz_mod (b, b, pol);
+		mpz_set (g, temp);		// set g
+		r = m;
+	}
+	goto tshanks_mainloop;
 
 #endif
+	mpz_clears (pol, temp, temp2, NULL);
 	uint32_t t = 0;
 	while ( t*t % p != a && t < p/2 + 1 ){
 		t ++;
