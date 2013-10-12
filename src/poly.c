@@ -156,8 +156,10 @@ void gpool_init (poly_gpool_t *gp, nsieve_t *ns){
 void advance_gpool (poly_gpool_t *gp, poly_group_t *group){	// advances the frogs, and sets the gvals field of 'group'
 	int k = gp->k;
 	// update group->gvals
-	for (int i=0; i<k; i++){
-		group->gvals[i] = gp->gpool[gp->frogs[i]];
+	if (group != NULL){
+		for (int i=0; i<k; i++){
+			group->gvals[i] = gp->gpool[gp->frogs[i]];
+		}
 	}
 
 	// now advance the frogs.
@@ -191,7 +193,9 @@ void generate_polygroup (poly_gpool_t *gp, poly_group_t *pg, nsieve_t *ns){
 	// We want A to be about sqrt (2N) / M. Thus the primes we're looking at should be around [sqrt(2n)/M)] ^ (1/k).
 	// However, there is no particular requirement that they be of comparable sizes, so this is just a rough guide.
 	
-	advance_gpool (gp, pg);
+	for (int i=0; i < ns->nthreads; i++){
+		advance_gpool (gp, pg);
+	}
 //	printf("Multiplying together these g-vals: %d", pg->gvals[0]);
 	mpz_set_ui (pg->a, pg->gvals[0]);	// multiply all of the g-values together to get A.
 	for (int i=1; i < gp->k; i++){

@@ -30,6 +30,8 @@ void add_polygroup_relations (poly_group_t *pg, nsieve_t *ns){
 		}
 	}
 
+	pthread_mutex_lock (&ns->lock);
+
 	if (pg->victim != NULL){	// we found a full relation
 		// factor victim over the fb:
 		mpz_t temp;
@@ -40,7 +42,12 @@ void add_polygroup_relations (poly_group_t *pg, nsieve_t *ns){
 		// row (multiplying (xor-ing) by the victim). The partials will have this done to them whenever they are added to
 		// the matrix at the end of sieving. 
 		for (int i=0; i < pg->nrels; i++){
-			if (ns->nfull >= ns->rels_needed) return;	// we're done sieving.
+			if (ns->nfull >= ns->rels_needed) {
+				ns->info_npg ++;
+				ns->info_npoly += ns->bvals;
+				pthread_mutex_unlock (&ns->lock);
+				return;	// we're done sieving.
+			}
 			if (pg->relns[i] == pg->victim) continue;	// we don't want to add the victim to the list.
 			if (pg->relns[i]->cofactor == 1){	// full relation
 				matrel_t *m = &ns->relns[ns->nfull];
@@ -56,6 +63,9 @@ void add_polygroup_relations (poly_group_t *pg, nsieve_t *ns){
 		// doing either larger sieve intervals or a larger k or something. 
 		printf("There are no full relations for this polygroup! We must throw away the partials.\n");
 	}
+	ns->info_npg ++;
+	ns->info_npoly += ns->bvals;
+	pthread_mutex_unlock (&ns->lock);
 }
 
 uint8_t fast_log (uint32_t x){	// very rough aprox. to log_2 (x)

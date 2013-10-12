@@ -8,6 +8,7 @@
 #include <math.h>
 #include <string.h>
 #include <time.h>
+#include <pthread.h>
 #include <gmp.h>
 
 #define KMAX 12
@@ -123,9 +124,22 @@ typedef struct {
 	uint32_t lp_bound;	// large prime bound. Relations with one factor between the top of the factor base and lp_bound are admitted as partials.
 	hashtable_t partials;	// hashtable for storing partial relations. This might have to change for double large primes.
 
+	int nthreads;		// number of sieving threads to use.
+	pthread_t *threads;	
+	pthread_mutex_t lock;
+
+	int info_npoly;
+	int info_npg;
+
 	time_data_t timing;
 
 } nsieve_t;
+
+typedef struct {
+	poly_gpool_t gpool;	// thread's gpool. All of the gpools will have the same gvalues; the frogs will be staggered, and to get the next group,
+				// the frogs will be advanced (nthreads) times. 
+	nsieve_t *ns;
+} thread_data_t;
 
 /* Matrix row get/set */
 void clear_row (uint64_t *, nsieve_t *);

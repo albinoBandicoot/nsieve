@@ -179,6 +179,11 @@ void nsieve_init (nsieve_t *ns, mpz_t n){
 		mpz_mul_ui (ns->N, ns->N, ns->multiplier);
 	}
 
+	ns->nthreads = 1;
+	pthread_mutex_init (&ns->lock, NULL);
+	ns->info_npoly = 0;
+	ns->info_npg = 0;
+
 	ns->nfull = 0;
 	ns->npartial = 0;
 	ns->tdiv_ct = 0;
@@ -199,6 +204,66 @@ void nsieve_init (nsieve_t *ns, mpz_t n){
 	ht_init (ns);
 	ns->timing.init_time = clock() - start;
 }
+
+void multithreaded_factor (nsieve_t *ns, int nthreads){
+	ns->nthreads = nthreads;
+	ns->threads = (pthread_t *) malloc(nthreads * sizeof (pthread_t));
+
+	thread_data_t *td = (thread_data_t *) malloc (nthreads * sizeof (thread_data_t));
+
+	poly_gpool_t gpool;
+	gpool_init (&gpool, ns);
+
+	for (int i=0; i<nthreads; i++){
+		td[i].ns = ns;
+		td[i].gpool = gpool;	// this does a block copy. However, the frogs are stored as a pointer, so we have to copy frogs manually.
+		td[i].gpool.frogs = (uint32_t *) malloc(ns->k * 4);
+		for (int k=0; k<ns->k; k++){
+			td[i].gpool.frogs[k] = gpool.frogs[k];
+		}
+		for (int j=0; j < i; j++){
+			advance_gpool (&td[i].gpool, NULL);
+		}
+	}
+	/* Set things in motion */
+	for (int i=0; i<nthreads; i++){
+		pthread_create (&ns->threads[i], NULL, run_sieve_thread, &td[i]);
+	}
+	/* Wait for all threads to finish */
+	for (int i=0; i<nthreads; i++){
+		pthread_join (ns->threads[i], NULL);
+	}
+	/* Now proceed with the rest of the factorization in this thread */
+	combine_partials (ns);
+	solve_matrix (ns);
+}
+
+void *run_sieve_thread (void *args){
+	thread_data_t *td = (thread_data_t *) args;
+	nsieve_t *ns = td->ns;
+	
+	block_data_t sievedata;
+	while (ns->nfull + ns->npartial < ns->rels_needed){
+		poly_group_t *curr_polygroup = (poly_group_t *) malloc (sizeof (poly_group_t));
+		polygroup_init (curr_polygroup, ns);
+		generate_polygroup (&td->gpool, curr_polygroup, ns);
+		for (int i=0; i < ns->bvals; i++){
+			poly_t *curr_poly = (poly_t *) malloc (sizeof (poly_t));
+			poly_init (curr_poly);
+			generate_poly (curr_poly, curr_polygroup, ns, i);
+			sieve_poly (&sievedata, curr_polygroup, curr_poly, ns);
+		}
+		add_polygroup_relations (curr_polygroup, ns);
+
+		pthread_mutex_lock (&ns->lock);
+		ns->npartial = ht_count (&ns->partials);
+		printf("Have %d of %d relations (%d full + %d combined from %d partial); sieved %d polynomials from %d groups. \r", ns->nfull + ns->npartial, ns->rels_needed, ns->nfull, ns->npartial, ns->partials.nentries, ns->info_npoly, ns->info_npg);
+		pthread_mutex_unlock (&ns->lock);
+	}
+	return NULL;
+}
+
+
 
 /* Once ns has been initialized (by calling nsieve_init), this method is called to actaully perform the bulk of the factorization */
 void factor (nsieve_t *ns){
@@ -299,7 +364,8 @@ int main (int argc, const char *argv[]){
 	long start = clock();
 	nsieve_init (&ns, n);
 
-	factor (&ns);
+	multithreaded_factor (&ns, 3);
+//	factor (&ns);
 	ns.timing.total_time = clock() - start;
 
 	printf ("\nTiming summary: \

@@ -37,7 +37,7 @@ ifneq ($(USE_ASM),0)
 	gcc -c -g $(MATROW_ASM_FILE) -o build/matrow_ops.o
 endif
 	ar rc build/libnsieve.a ${OBJECTS} 
-	$(CC) $(CFLAGS) -o bin/nsieve src/nsieve.c -Lbuild/ -lnsieve -lgmp -lm
+	$(CC) $(CFLAGS) -o bin/nsieve src/nsieve.c -Lbuild/ -lnsieve -lgmp -lm -lpthread
 
 poly.o:	poly.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o build/poly.o src/poly.c 
