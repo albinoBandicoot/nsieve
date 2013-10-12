@@ -3,3 +3,49 @@ It probably won't compete with amazing programs like msieve and yafu: its
 purpose is mostly for my own education. 
 
 Nsieve relies on GMP for its arbitrary precision arithmetic. 
+
+Installation can be as simple as typing 'make.' However, you can also set a 
+variable in the make invocation to try to use some hand-coded assembly routines
+that take advantage of SSE instructions to speed up the matrix solving. The
+speedup is not huge (3-5% on the matrix phase). To include these routines,
+compile with either
+	make USE_ASM=32	
+or
+	make USE_ASM=64
+depending on your system. If it doesn't work, it will not be much slower.
+
+Several executables will be produced:
+
+	nsieve	- self-initializing quadratic sieve
+	numgen	- generate interesting numbers to factor
+	tdiv	- factor by trial division
+	rho	- factor by pollard rho
+	prcheck	- check if input is prime
+
+tdiv, rho, and prcheck expect a single (arbitrary precision) input number. This
+may be given either on the command line or from standard input.
+
+numgen expects one or more integers on the command line. For each argument, it
+will generate a prime number with that many bits. It will multiply all of these
+together and output the result.
+	numgen 50		- will generate a 50 bit prime number
+	numgen 20 20 20		- will generate a number that factors as the 
+				  product of three 20-bit primes.
+
+nsieve can accept an input number on either the command line or from stdin. It
+will attempt to select parameters that are good for this size number, however
+several of these can be overriden on the command line. The options are:
+	
+	-M	Set the number of blocks in the sieve interval for each poly.
+	-fbb	Set the factor base bound
+	-lpb	Set the large prime bound (as a multiplier on the FB bound)
+	-mult	Set the multiplier
+	-T	Set the trial-division cutoff multiplier.
+	-np	Turn off partial relations.
+
+Each of these expects as the next argument a number (floating point for T, 
+integers for everything else).
+
+A number that is not associated with an option flag will be interpreted as the
+input number. If no such number is found, nsieve will wait for one to come in
+on standard input.

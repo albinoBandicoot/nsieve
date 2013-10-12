@@ -291,6 +291,11 @@ int main (int argc, const char *argv[]){
 	if (!nspecd){
 		mpz_inp_str (n, stdin, 10);
 	}
+
+	printf ("Removing small factors of N by trial division and pollard rho... \n");
+	tdiv (n, 32768);
+	rho  (n, 32768, 0);
+	printf ("Starting the quadratic sieve... \n");
 	long start = clock();
 	nsieve_init (&ns, n);
 
@@ -298,11 +303,11 @@ int main (int argc, const char *argv[]){
 	ns.timing.total_time = clock() - start;
 
 	printf ("\nTiming summary: \
-		 \n\tInitialization:   %ldms \
-		 \n\tSieving:          %ldms \
-		 \n\tFiltering:        %ldms \
-		 \n\tMatrix solving:   %ldms \
-		 \n\tFactor deduction: %ldms \
-		 \n\tTOTAL:            %ldms\n", ns.timing.init_time/1000, ns.timing.sieve_time/1000, ns.timing.filter_time/1000, ns.timing.matsolve_time/1000, ns.timing.facdeduct_time/1000, ns.timing.total_time/1000);
+		 \n\tInitialization:    %ldms \
+		 \n\tSieving:           %ldms \
+		 \n\tMatbuild + Filter: %ldms \
+		 \n\tMatrix solving:    %ldms \
+		 \n\tFactor deduction:  %ldms \
+		 \n\tTOTAL:             %ldms\n", ns.timing.init_time/1000, ns.timing.sieve_time/1000, ns.timing.filter_time/1000, ns.timing.matsolve_time/1000, ns.timing.facdeduct_time/1000, ns.timing.total_time/1000);
 
 }

@@ -6,6 +6,7 @@
 #include "poly.h"
 #include "filter.h"
 #include "matrix.h"
+#include "rho.h"
 
 void generate_fb (nsieve_t *);	// fills in 'fb' and 'roots'
 

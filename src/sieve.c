@@ -384,10 +384,14 @@ fixedprec_tdiv:
 	return;
 
 add_full_rel:
-	rel->cofactor = 1;
-	p->group->relns[ p->group->nrels ] = rel;
-	p->group->nrels ++;
-	return;
+	if (p->group->nrels < PG_REL_STORAGE){
+		rel->cofactor = 1;
+		p->group->relns[ p->group->nrels ] = rel;
+		p->group->nrels ++;
+		return;
+	} else {
+		free(rel);
+	}
 add_partial_rel:
 	rel->cofactor = q;
 	ht_add (&ns->partials, rel);

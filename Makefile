@@ -18,7 +18,7 @@ vpath %.o build/
 OBJECTS= build/*.o
 HEADERS= src/*.h
 
-all: nsieve bin/numgen bin/prcheck bin/tdiv
+all: nsieve bin/numgen bin/prcheck bin/tdiv bin/rho
 
 bin/prcheck: prcheck.c
 	$(CC) $(CFLAGS) -o bin/prcheck src/prcheck.c -lgmp
@@ -29,7 +29,10 @@ bin/numgen: numgen.c
 bin/tdiv: tdiv.c
 	$(CC) $(CFLAGS) -o bin/tdiv src/tdiv.c -lgmp
 
-nsieve: poly.o sieve.o common.o filter.o nsieve.o matrix.o
+bin/rho: rho.o
+	$(CC) $(CFLAGS) -o bin/rho src/rho.c build/rho.o -lgmp
+
+nsieve: poly.o sieve.o common.o filter.o nsieve.o matrix.o rho.o
 ifneq ($(USE_ASM),0)
 	gcc -c -g $(MATROW_ASM_FILE) -o build/matrow_ops.o
 endif
@@ -48,6 +51,8 @@ nsieve.o: nsieve.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o build/nsieve.o src/nsieve.c 
 matrix.o: matrix.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o build/matrix.o src/matrix.c
+rho.o: rhofuncs.c $(HEADERS)
+	$(CC) $(CFLAGS) -c -o build/rho.o src/rhofuncs.c
 
 clean:
 	rm -f -R build/* bin/*

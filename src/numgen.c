@@ -2,26 +2,32 @@
 #include <stdlib.h>
 #include <gmp.h>
 
+void getprime (mpz_t res, gmp_randstate_t rand, int bits){
+	mpz_urandomb (res, rand, bits);
+	while (mpz_sizeinbase (res, 2) != bits){
+		mpz_urandomb (res, rand, bits);
+	}
+	mpz_nextprime (res, res);
+}
+
 int main (int argc, const char *argv[]){
+	if (argc == 1){
+		printf("! Error: expecting command line options (list of integers representing bit lengths of the primes to multiply together)\n");
+		return 1;
+	}
+	mpz_t res, temp;
+	mpz_inits (res, temp, NULL);
+	mpz_set_ui (res, 1);
+
 	gmp_randstate_t rand;
 	gmp_randinit_default (rand);
-	int asize, bsize;
-	asize = atoi(argv[1]);
-	bsize = atoi(argv[2]);
-	mpz_t a, b;
-	mpz_inits (a, b, NULL);
-	mpz_urandomb (a, rand, asize);
-	mpz_urandomb (b, rand, bsize);
-	while (mpz_sizeinbase (a, 2) != asize){
-		mpz_urandomb (a, rand, asize);
-	}
-	while (mpz_sizeinbase (b, 2) != bsize){
-		mpz_urandomb (b, rand, bsize);
-	}
 
-	mpz_nextprime(a, a);
-	mpz_nextprime(b, b);
-	mpz_mul (a, a, b);
-	mpz_out_str (stdout, 10, a);
+	int arg =1;
+	while (arg < argc){
+		getprime (temp, rand, atoi(argv[arg]));
+		mpz_mul (res, res, temp);
+		arg++;
+	}
+	mpz_out_str (stdout, 10, res);
 	printf("\n");
 }
