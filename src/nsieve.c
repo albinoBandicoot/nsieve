@@ -189,6 +189,7 @@ void nsieve_init (nsieve_t *ns, mpz_t n){
 
 	ns->relns = (matrel_t *)(malloc((ns->fb_len + ns->extra_rels) * sizeof(matrel_t)));
 	ns->row_len = (ns->fb_len)/(8*sizeof(uint64_t)) + 1;	// we would need that to be ns->fb_len - 1, except we need to throw in the factor -1 into the FB. 
+	if (ns->row_len % 2 == 1) ns->row_len ++;	// to take advantage of SSE instructions, we want to chunk by 128 bits.
 
 	printf("There are %d primes in the factor base, so we will search for %d relations. The matrix rows will have %d 8-byte chunks in them.\n", ns->fb_len, ns->rels_needed, ns->row_len);
 	for (int i=0; i < ns->rels_needed; i++){

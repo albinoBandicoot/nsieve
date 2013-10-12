@@ -1,5 +1,15 @@
 CC=gcc
 CFLAGS= -g -O3 -pedantic -Wall -std=c99 -I./
+USE_ASM=0
+MATROW_ASM_FILE=
+ifneq ($(USE_ASM),0)
+CFLAGS+= -DUSE_ASM
+endif
+ifeq ($(USE_ASM),32)
+	MATROW_ASM_FILE=src/matrow_ops_32.s
+else ifeq ($(USE_ASM),64)
+	MATROW_ASM_FILE=src/matrow_ops_64.s
+endif
 
 vpath %.h src/
 vpath %.c src/
@@ -20,6 +30,9 @@ bin/tdiv: tdiv.c
 	$(CC) $(CFLAGS) -o bin/tdiv src/tdiv.c -lgmp
 
 nsieve: poly.o sieve.o common.o filter.o nsieve.o matrix.o
+ifneq ($(USE_ASM),0)
+	gcc -c -g $(MATROW_ASM_FILE) -o build/matrow_ops.o
+endif
 	ar rc build/libnsieve.a ${OBJECTS} 
 	$(CC) $(CFLAGS) -o bin/nsieve src/nsieve.c -Lbuild/ -lnsieve -lgmp -lm
 

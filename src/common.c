@@ -23,12 +23,15 @@ void flip_bit (uint64_t *m, int pos){
 //	printf("pos = %d; block = %d; mask = %llx\n", pos, block, mask);
 	m[block] = m[block] ^ mask;
 }
-
+#ifndef USE_ASM
 void xor_row (uint64_t *res, uint64_t *op, int len){
 	for (int i=0; i<len; i++){
 		res[i] = res[i] ^ op[i];
 	}
 }
+#endif
+
+extern int bitscan (uint32_t x);
 
 int rightmost_1 (uint64_t *m, int max_i){
 	int block = max_i / 64;
@@ -37,7 +40,17 @@ int rightmost_1 (uint64_t *m, int max_i){
 	if (m[block] == 0) return -1;
 
 	// now we need to determine the rightmost 1 in m[block].
+#ifdef USE_ASM
+	uint32_t low = m[block];
+	uint32_t high = m[block] >> 32;
+	if (high == 0){
+		return (63 - 32 - bitscan(low)) + 64 * block;
+	} else {
+		return (63 - bitscan(high)) + 64 * block;
+	}
+#else
 	uint64_t x = m[block];
+	
 	int pos = 0;
 	while ((x & (1ull << 63)) == 0){
 		pos++;
@@ -45,6 +58,7 @@ int rightmost_1 (uint64_t *m, int max_i){
 	}
 	int res =  (63 - pos) + 64 * block;
 	return res;
+#endif
 }
 
 int is_zero_vec (uint64_t *m, int len){
