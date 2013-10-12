@@ -9,7 +9,7 @@ void sieve_poly (block_data_t *data, poly_group_t *pg, poly_t *p, nsieve_t *ns){
 		sieve_block (data, pg, p, ns, start + i * BLOCKSIZE);
 		ns->sieve_locs += BLOCKSIZE;
 	}
-//	free (p->bmodp);	// free these temporary precomputed values.
+	free (p->bmodp);	// free these temporary precomputed values.
 //	free (p->offsets1);
 //	free (p->offsets2);
 }
@@ -36,7 +36,8 @@ void add_polygroup_relations (poly_group_t *pg, nsieve_t *ns){
 		// factor victim over the fb:
 		mpz_t temp;
 		mpz_init (temp);
-		fb_factor_rel(pg->victim, pg->victim_factors, ns);
+		fl_fillrow (pg->victim, pg->victim_factors, ns);
+//		fb_factor_rel(pg->victim, pg->victim_factors, ns);
 		mpz_clear (temp);
 		// now we will loop through the relations. For each full relation, we construct a matrel_t for it, and fill in the 
 		// row (multiplying (xor-ing) by the victim). The partials will have this done to them whenever they are added to
@@ -53,7 +54,8 @@ void add_polygroup_relations (poly_group_t *pg, nsieve_t *ns){
 				matrel_t *m = &ns->relns[ns->nfull];
 				m -> r1 = pg->relns[i];
 				m -> r2 = NULL;
-				fb_factor_rel (m->r1, m->row, ns);
+				fl_fillrow (m->r1, m->row, ns);
+//				fb_factor_rel (m->r1, m->row, ns);
 				xor_row (m->row, pg->victim_factors, ns->row_len);
 				ns->nfull ++;
 			}
@@ -354,19 +356,26 @@ void construct_relation (mpz_t qx, int32_t x, poly_t *p, nsieve_t *ns){
 	rel_t *rel = (rel_t *)(malloc(sizeof(rel_t)));
 	rel->poly = p;
 	rel->x = x;
+	rel->factors = NULL;
+	if (mpz_cmp_ui (qx, 0) < 0){
+		fl_add (rel, 0);
+	}
 	mpz_abs(qx, qx);
 	uint64_t q = 0;
 	int i;
 	while (mpz_divisible_ui_p(qx, 2)){
 		mpz_divexact_ui(qx, qx, 2);
+		fl_add (rel, 1);
 	}
 	for (i=1; i < ns->fb_len; i++){
 		if (get_offset (ns->fb[i], i, x, 0, p, p->group, ns) == 0 || get_offset (ns->fb[i], i, x, 1, p, p->group, ns) == 0){
 //		if ((p->offsets1[i] -(p->M + x)) % ns->fb[i] == 0 || (p->offsets2[i] -(p->M + x)) % ns->fb[i] == 0){
 			mpz_divexact_ui(qx, qx, ns->fb[i]);
+			fl_add (rel, i+1);
 			if (mpz_fits_64 (qx)) goto fixedprec_tdiv;
 			while (mpz_divisible_ui_p (qx, ns->fb[i])){
 				mpz_divexact_ui(qx, qx, ns->fb[i]);
+				fl_add (rel, i+1);
 				if (mpz_fits_64 (qx)){	// we don't need to test for anything else here - all the relevant cases happen only when qx is well under 2^64.
 					goto fixedprec_tdiv;
 				}
@@ -376,21 +385,28 @@ void construct_relation (mpz_t qx, int32_t x, poly_t *p, nsieve_t *ns){
 fixedprec_tdiv:
 	q = mpz_get_64 (qx);
 	if (q < ns->fb[i] * ns->fb[i]){
-		if (q < ns->fb_bound) goto add_full_rel;
+		if (q < ns->fb_bound){
+			fl_add (rel, fb_lookup (q, ns));
+			goto add_full_rel;
+		}
 		if (q < ns->lp_bound) goto add_partial_rel;
 	}
 	while (i < ns->fb_len){
 		while (q % ns->fb[i] == 0){
 			q /= ns->fb[i];
+			fl_add (rel, i+1);
 			if (q < ns->fb[i] * ns->fb[i]){
-				if (q < ns->fb_bound) goto add_full_rel;
+				if (q < ns->fb_bound){
+					fl_add (rel, fb_lookup (q, ns));
+					goto add_full_rel;
+				}
 				if (q < ns->lp_bound) goto add_partial_rel;
 			}
 		}
 		i++;
 	}
 	// if we're here, we weren't able to do anything with this relation.
-	free (rel);
+	rel_free (rel);
 	return;
 
 add_full_rel:
@@ -400,11 +416,14 @@ add_full_rel:
 		p->group->nrels ++;
 		return;
 	} else {
-		free(rel);
+		rel_free(rel);
+		return;
 	}
 add_partial_rel:
 	rel->cofactor = q;
+	pthread_mutex_lock (&ns->lock);
 	ht_add (&ns->partials, rel);
+	pthread_mutex_unlock (&ns->lock);
 	return;
 
 }

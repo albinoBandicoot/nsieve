@@ -28,7 +28,8 @@ void combine_bucket (ht_entry_t *h, nsieve_t *ns){
 		*/
 		rel_t *base_rel = h->rel;
 		uint64_t base_factors[ns->row_len];
-		fb_factor_rel (base_rel, &base_factors[0], ns);
+		fl_fillrow (base_rel, &base_factors[0], ns);
+//		fb_factor_rel (base_rel, &base_factors[0], ns);
 
 		h = h->next;	// skip past the base rel.
 		while (h != NULL && base_rel->cofactor == h->rel->cofactor){
@@ -41,7 +42,8 @@ void combine_bucket (ht_entry_t *h, nsieve_t *ns){
 			matrel_t *m = &ns->relns[ns->nfull];
 			m -> r1 = base_rel;
 			m -> r2 = h -> rel;
-			fb_factor_rel (h->rel, m->row, ns);
+			fl_fillrow (h->rel, m->row, ns);
+//			fb_factor_rel (h->rel, m->row, ns);
 			xor_row (m->row, &base_factors[0], ns->row_len);	// multiply the factorizations together.
 			xor_row (m->row, base_rel->poly->group->victim_factors, ns->row_len);	// and since this hasn't been done yet, multiply
 			xor_row (m->row, m->r2->poly->group->victim_factors, ns->row_len);		// in their corresponding victims.

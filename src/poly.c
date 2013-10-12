@@ -293,10 +293,11 @@ void generate_poly (poly_t *p, poly_group_t *pg, nsieve_t *ns, int i){
 	// compute optimal sieve bound
 	mpz_t temp;
 	mpz_init (temp);
+/*
 	mpz_mul_ui(temp, ns->N, 2);
 	mpz_sqrt(temp, temp);
 	mpz_tdiv_q(temp, temp, p->a);
-	p->M = ns->M;
+*/	p->M = ns->M;
 	/*
 	p->M = mpz_get_ui(temp);
 	if (p->M <= 0.5 * BLOCKSIZE){	// p->M will store the NUMBER OF BLOCKS TOTAL to sieve.

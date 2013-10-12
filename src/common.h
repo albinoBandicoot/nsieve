@@ -64,10 +64,21 @@ typedef struct {
 	uint32_t *frogs;	// the last used set of g values. A call to advance_gpool will get the next set of values. 
 } poly_gpool_t;
 
+typedef struct flentry {
+	uint32_t fac;	// this is actually an index into the factor base.
+	struct flentry *next;
+} fl_entry_t;
+
 typedef struct relation {
 	poly_t  *poly;
 	int32_t  x;
 	uint32_t cofactor;
+	fl_entry_t *factors;	// storing the factors of the relation is very desirable for several reasons.
+				// First it allows us to free the temporaries (bmodp, ainverses) after we're done sieving with them; otherwise for
+				// our accelerated tdiv code we'd have to hold on to all of them. This is as INSANE amount of memory for semi-large
+				// factorizations (it will eat 80 MB per second if you let it). 
+				// Second, we don't have to re-do the trial division when we add to the matrix, which is a substantial time drain,
+				// especially for partials.
 } rel_t;
 
 typedef struct {	// One of these gets associated with each row in the matrix. r2 is non-null if this row was construted by combining partials.
@@ -165,4 +176,11 @@ uint64_t mpz_get_64 (mpz_t a);
 int mpz_fits_64 (mpz_t a);
 //uint32_t find_root_ui (uint32_t a, uint32_t p);
 
+/* Factor list ops */
+void fl_add (rel_t *, uint32_t);
+void fl_free (rel_t *);
+void fl_fillrow (rel_t *, uint64_t *row, nsieve_t *ns);
+void rel_free (rel_t *);
+
+int  fb_lookup (uint32_t p, nsieve_t *);
 #endif

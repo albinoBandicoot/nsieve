@@ -36,7 +36,7 @@ extern int bitscan (uint32_t x);
 int rightmost_1 (uint64_t *m, int max_i){
 	int block = max_i / 64;
 	// first skip over all of the leading 0 blocks.
-	while (block >= 0 && m[block] == 0)  block--;
+	while (block > 0 && m[block] == 0)  block--;
 	if (m[block] == 0) return -1;
 
 	// now we need to determine the rightmost 1 in m[block].
@@ -319,3 +319,64 @@ uint64_t mpz_get_64 (mpz_t a){
 	}
 	return res;
 }
+
+/* Factor list ops */
+
+void fl_add (rel_t *rel, uint32_t p){
+	// prepend, because that is more efficient. It does mean that the list will be in reverse order, which should matter.
+	fl_entry_t *entry = (fl_entry_t *) malloc(sizeof (fl_entry_t));
+	entry->fac = p;
+	entry->next = rel->factors;
+	rel->factors = entry;
+}
+
+void fl_free (rel_t * rel){
+	fl_entry_t *entry = rel->factors;
+	while (entry != NULL){
+		fl_entry_t *next = entry->next;
+		free (entry);
+		entry = next;
+	}
+}
+
+void fl_fillrow (rel_t *rel, uint64_t *row, nsieve_t *ns){
+	clear_row (row, ns);
+	fl_entry_t *entry = rel->factors;
+	while (entry != NULL){
+		if (entry->fac < 0){
+			printf ("WARNING - bad factor: %d\n", -entry->fac);
+		}
+		flip_bit (row, entry->fac);
+		entry = entry->next;
+	}
+}
+
+void rel_free (rel_t *rel){
+	fl_free (rel);
+	free (rel);
+}
+
+int fb_lookup (uint32_t p, nsieve_t *ns){
+	// returns the index of p in the factor base, plus 1 (for indexing into the matrix rows).
+	int low = 0;
+	int high = ns->fb_len - 1;
+	int guess = (low + high)/2;
+	while (high - low > 1){
+		if (p < ns->fb[guess]){
+			high = guess;
+			guess = (high + low)/2;
+		} else if (p > ns->fb[guess]){
+			low = guess;
+			guess = (high + low)/2;
+		} else {
+			return guess + 1;
+		}
+	}
+	for (int i=low; i<high; i++){
+		if (p == ns->fb[i]){
+			return i+1;
+		}
+	}
+	return -p;	// this is so we have some info about what went wrong.
+}
+

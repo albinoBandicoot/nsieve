@@ -206,6 +206,7 @@ void nsieve_init (nsieve_t *ns, mpz_t n){
 }
 
 void multithreaded_factor (nsieve_t *ns, int nthreads){
+	long start = clock ();
 	ns->nthreads = nthreads;
 	ns->threads = (pthread_t *) malloc(nthreads * sizeof (pthread_t));
 
@@ -213,6 +214,7 @@ void multithreaded_factor (nsieve_t *ns, int nthreads){
 
 	poly_gpool_t gpool;
 	gpool_init (&gpool, ns);
+	printf("Using k = %d; gvals range from %d to %d.\n", ns->k, gpool.gpool[0], gpool.gpool[gpool.ng-1]);
 
 	for (int i=0; i<nthreads; i++){
 		td[i].ns = ns;
@@ -225,6 +227,7 @@ void multithreaded_factor (nsieve_t *ns, int nthreads){
 			advance_gpool (&td[i].gpool, NULL);
 		}
 	}
+	long sievestart = clock();
 	/* Set things in motion */
 	for (int i=0; i<nthreads; i++){
 		pthread_create (&ns->threads[i], NULL, run_sieve_thread, &td[i]);
@@ -233,9 +236,12 @@ void multithreaded_factor (nsieve_t *ns, int nthreads){
 	for (int i=0; i<nthreads; i++){
 		pthread_join (ns->threads[i], NULL);
 	}
+	ns->timing.sieve_time = clock() - sievestart;
+	printf("\n");
 	/* Now proceed with the rest of the factorization in this thread */
 	combine_partials (ns);
 	solve_matrix (ns);
+	ns->timing.total_time = clock() - start;
 }
 
 void *run_sieve_thread (void *args){
@@ -254,10 +260,12 @@ void *run_sieve_thread (void *args){
 			sieve_poly (&sievedata, curr_polygroup, curr_poly, ns);
 		}
 		add_polygroup_relations (curr_polygroup, ns);
+		free (curr_polygroup->ainverses);
 
 		pthread_mutex_lock (&ns->lock);
 		ns->npartial = ht_count (&ns->partials);
 		printf("Have %d of %d relations (%d full + %d combined from %d partial); sieved %d polynomials from %d groups. \r", ns->nfull + ns->npartial, ns->rels_needed, ns->nfull, ns->npartial, ns->partials.nentries, ns->info_npoly, ns->info_npg);
+		fflush(stdout);
 		pthread_mutex_unlock (&ns->lock);
 	}
 	return NULL;
@@ -329,6 +337,7 @@ int main (int argc, const char *argv[]){
 	ns.lp_bound = -1;
 	ns.M = -1;
 	ns.multiplier = -1;
+	int nthreads = 1;
 	while (pos < argc){
 		if (!strcmp(argv[pos], "-T")){
 			ns.T = atof (argv[pos+1]);
@@ -347,6 +356,9 @@ int main (int argc, const char *argv[]){
 		} else if (!strcmp(argv[pos], "-mult")){
 			ns.multiplier = atoi (argv[pos+1]);
 			pos++;
+		} else if (!strcmp(argv[pos], "-threads")){
+			nthreads = atoi (argv[pos+1]);
+			pos++;
 		} else {
 			mpz_set_str (n, argv[pos], 10);
 			nspecd = 1;
@@ -364,7 +376,7 @@ int main (int argc, const char *argv[]){
 	long start = clock();
 	nsieve_init (&ns, n);
 
-	multithreaded_factor (&ns, 3);
+	multithreaded_factor (&ns, nthreads);
 //	factor (&ns);
 	ns.timing.total_time = clock() - start;
 
