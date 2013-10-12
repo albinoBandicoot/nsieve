@@ -322,7 +322,7 @@ fp_tdiv:
 							return;
 						}
 					}
-					printf("UH OH BAD BAD.\n");
+					printf("UH OH BAD BAD; remainder = %lld.\n", q);
 					return;
 				}
 			}

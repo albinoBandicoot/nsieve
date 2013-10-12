@@ -18,7 +18,7 @@ void extract (nsieve_t *ns, char *vals){
 	int count = 0;
 	for (int i=0; i < ns->fb_bound-2; i++){
 		if (vals[i] == 0){
-			if (i == 0 || mpz_kronecker_ui(ns->N, i+2) == 1){	// we must admit 2, since N is always a QR mod 2, but there's something wierd about the kronecker symbol for 2  because it's not odd.
+			if (i == 0 || i+2 == ns->multiplier || mpz_kronecker_ui(ns->N, i+2) == 1){	// we must admit 2, since N is always a QR mod 2, but there's something wierd about the kronecker symbol for 2  because it's not odd.
 				count++;
 			}
 		}
@@ -28,7 +28,7 @@ void extract (nsieve_t *ns, char *vals){
 	ns->fb = (uint32_t *)(malloc(count * sizeof(uint32_t)));
 	int w = 0;
 	for (int i=0; i < ns->fb_bound-2; i++){
-		if (vals[i] == 0 && (i == 0 || mpz_kronecker_ui(ns->N, i+2) == 1)){
+		if (vals[i] == 0 && (i == 0 || i+2 == ns->multiplier || mpz_kronecker_ui(ns->N, i+2) == 1)){
 			ns->fb[w] = i+2;
 			w++;
 		}
@@ -47,11 +47,15 @@ void generate_fb (nsieve_t *ns){
 	ns->roots = (uint32_t *)(malloc(ns->fb_len * sizeof(uint32_t)));
 	ns->fb_logs = (uint8_t *)(malloc(ns->fb_len * sizeof(uint8_t)));
 	for (int i=0; i<ns->fb_len; i++){
-		ns->roots[i] = find_root (ns->N, ns->fb[i]);	// see common.c for the implementation of this method.
-		if (ns->roots[i] > ns->fb[i]/2){
-			ns->roots[i] = ns->fb[i] - ns->roots[i];	// normalize these to be the smaller of the two roots.
+		if (ns->fb[i] == ns->multiplier){
+			ns->roots[i] = 0;
+		} else {
+			ns->roots[i] = find_root (ns->N, ns->fb[i]);	// see common.c for the implementation of this method.
+			if (ns->roots[i] > ns->fb[i]/2){
+				ns->roots[i] = ns->fb[i] - ns->roots[i];	// normalize these to be the smaller of the two roots.
+			}
+			// note that there are actually 2 square roots; however, the second may be obtained readily as p - sqrt#1, so only one is stored.
 		}
-		// note that there are actually 2 square roots; however, the second may be obtained readily as p - sqrt#1, so only one is stored.
 		ns->fb_logs[i] = fast_log (ns->fb[i]);
 	}
 }
@@ -103,10 +107,63 @@ void select_parameters (nsieve_t *ns){
 	}
 }
 
+const int nsmall_primes = 18;
+uint32_t small_primes[] = {2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61};
+
+double get_multiplier_score (uint32_t mult, nsieve_t *ns){
+	/* The modifier score is based on the 'Knuth-Schroeppel function,' defined as:
+	 *
+	 * f(k, N) = SUM_i g(p_i, kN) * log(p) - 0.5 log(k)	for all p_i in the factor base.
+	 * 
+	 * where	g(p, kN) = 2/p   if p does not divide k
+	 * 			 = 1/p	 if p divides k
+	 * 		g(2, kN) = 2	 if N ~= 1 (mod 8)
+	 * 			 = 0	 otherwise
+	 *
+	 * In practice, we only sum over the smallest elements of the factor base (the ones in small_primes)
+	*/
+	mpz_t temp;
+	mpz_init (temp);
+	mpz_mul_ui (ns->N, ns->N, mult);
+	double res = -0.5 * log(mult);
+	if (mpz_mod_ui (temp, ns->N, 8) == 1){
+		res += 2 * log(2.0);
+	}
+	mpz_clear (temp);
+	for (int i=1; i < nsmall_primes; i++){
+		if (small_primes[i] == mult){
+			res += (1.0/small_primes[i]) * log(small_primes[i]);
+		} else {
+			if (mpz_kronecker_ui(ns->N, small_primes[i]) == 1){
+				res += (2.0/small_primes[i]) * log(small_primes[i]);
+			}
+		}
+	}
+	mpz_divexact_ui (ns->N, ns->N, mult);
+	return res;
+}
+
 void select_multiplier (nsieve_t *ns){
+	int idx = -1;
+	double best = get_multiplier_score (1, ns);
+//	printf("\tmultiplier %d has score %f\n", 1, best);
+	for (int i=0; i < nsmall_primes; i++){
+		double score = get_multiplier_score (small_primes[i], ns);
+//		printf("\tmultiplier %d has score %f\n", small_primes[i], score);
+		if (score > best){
+			best = score;
+			idx = i;
+		}
+	}
+	if (idx == -1){
+		ns->multiplier = 1;
+	} else {
+		ns->multiplier = small_primes[idx];
+		mpz_mul_ui (ns->N, ns->N, small_primes[idx]);
+	}
+	printf("Selected multiplier %d.\n", ns->multiplier);
 }
 	
-
 /* Initialization and selection of the parameters for the factorization. This will fill allocate space for and initialize all of the 
  * fields in the nsieve_t. Notably, it will generate the factor base, compute the square roots, and allocate space for the matrix and partials. 
  */
@@ -116,7 +173,11 @@ void nsieve_init (nsieve_t *ns, mpz_t n){
 	mpz_init_set (ns->N, n);
 
 	select_parameters (ns);
-	select_multiplier (ns);
+	if (ns->multiplier == -1){	// not preselected
+		select_multiplier (ns);
+	} else {
+		mpz_mul_ui (ns->N, ns->N, ns->multiplier);
+	}
 
 	ns->nfull = 0;
 	ns->npartial = 0;
@@ -201,6 +262,7 @@ int main (int argc, const char *argv[]){
 	ns.fb_bound = -1;
 	ns.lp_bound = -1;
 	ns.M = -1;
+	ns.multiplier = -1;
 	while (pos < argc){
 		if (!strcmp(argv[pos], "-T")){
 			ns.T = atof (argv[pos+1]);
@@ -216,6 +278,9 @@ int main (int argc, const char *argv[]){
 			pos++;
 		} else if (!strcmp(argv[pos], "-np")){
 			ns.lp_bound = 1;
+		} else if (!strcmp(argv[pos], "-mult")){
+			ns.multiplier = atoi (argv[pos+1]);
+			pos++;
 		} else {
 			mpz_set_str (n, argv[pos], 10);
 			nspecd = 1;

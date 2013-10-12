@@ -109,6 +109,8 @@ typedef struct {
 	uint32_t *fb;		// the actual primes
 	uint8_t  *fb_logs;	// approximations to log_2 (p)
 	uint32_t *roots;	// the values of sqrt(n) mod p   for each p in the factor base. Computed once and for all at the beginning.
+	
+	uint32_t multiplier;	// instead of factoring N, factor kN, for a small squarefree k. This enables us to pick a factor base that's nicer (more smooth relns).
 
 	uint32_t nfull;		// running count of the number of full relations found thus far.
 	uint32_t npartial;	// running count of the number of partial relations found so far. This will be updated by calling ht_count, probably at the end of each batch of polynomials (or maybe after each poly, depending on how many relations are being recovered from each poly vs. group)).

@@ -94,6 +94,7 @@ void solve_matrix (nsieve_t *ns){
  * This is our desired congruence of squres. 
 */
 
+	mpz_divexact_ui (ns->N, ns->N, ns->multiplier);	// otherwise we will uncover the multiplier as a factor.
 	mpz_t ncopy, temp;
 	mpz_init_set (ncopy, ns->N);
 	mpz_inits (temp, NULL);
