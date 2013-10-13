@@ -371,7 +371,14 @@ int main (int argc, const char *argv[]){
 
 	printf ("Removing small factors of N by trial division and pollard rho... \n");
 	tdiv (n, 32768);
-	rho  (n, 32768, 0);
+	rho  (n, 65536, 0);
+	if (mpz_cmp_ui (n, 1)){
+		return 0;
+	} else if (mpz_probab_prime_p (n, 15)){
+		mpz_out_str(stdout, 10, n);
+		printf("\n");
+		return 0;
+	}
 	printf ("Starting the quadratic sieve... \n");
 	long start = clock();
 	nsieve_init (&ns, n);

@@ -7,12 +7,13 @@ Nsieve relies on GMP for its arbitrary precision arithmetic.
 Installation can be as simple as typing 'make.' However, you can also set a 
 variable in the make invocation to try to use some hand-coded assembly routines
 that take advantage of SSE instructions to speed up the matrix solving. The
-speedup is not huge (3-5% on the matrix phase). To include these routines,
+speedup is not huge (5-15% on the matrix phase). To include these routines,
 compile with either
 	make USE_ASM=32	
 or
 	make USE_ASM=64
-depending on your system. If it doesn't work, it will not be much slower.
+depending on your system. If it doesn't work, it will not be much slower, since
+the matrix phase takes very little time compared to the sieving.
 
 Several executables will be produced:
 
