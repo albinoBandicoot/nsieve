@@ -25,23 +25,16 @@ void add_polygroup_relations (poly_group_t *pg, nsieve_t *ns){
 	for (int i=0; i < pg->nrels; i++){
 //		printf("Looking at i = %d; cofactor = %d\n", i, pg->relns[i]->cofactor);
 		if (pg -> relns[i]->cofactor == 1){
-			pg->victim = pg->relns[i];
-			break;
+			if (fl_check (pg->relns[i], ns)){
+				pg->victim = pg->relns[i];
+				break;
+			}
 		}
 	}
 
 	pthread_mutex_lock (&ns->lock);
 
 	if (pg->victim != NULL){	// we found a full relation
-		// factor victim over the fb:
-		mpz_t temp;
-		mpz_init (temp);
-		fl_fillrow (pg->victim, pg->victim_factors, ns);
-//		fb_factor_rel(pg->victim, pg->victim_factors, ns);
-		mpz_clear (temp);
-		// now we will loop through the relations. For each full relation, we construct a matrel_t for it, and fill in the 
-		// row (multiplying (xor-ing) by the victim). The partials will have this done to them whenever they are added to
-		// the matrix at the end of sieving. 
 		for (int i=0; i < pg->nrels; i++){
 			if (ns->nfull >= ns->rels_needed) {
 				ns->info_npg ++;
@@ -50,14 +43,15 @@ void add_polygroup_relations (poly_group_t *pg, nsieve_t *ns){
 				return;	// we're done sieving.
 			}
 			if (pg->relns[i] == pg->victim) continue;	// we don't want to add the victim to the list.
+			if (!fl_check (pg->relns[i], ns)) continue;	// don't add bad relations
 			if (pg->relns[i]->cofactor == 1){	// full relation
 				matrel_t *m = &ns->relns[ns->nfull];
 				m -> r1 = pg->relns[i];
 				m -> r2 = NULL;
-				fl_fillrow (m->r1, m->row, ns);
-//				fb_factor_rel (m->r1, m->row, ns);
-				xor_row (m->row, pg->victim_factors, ns->row_len);
+				fl_concat  (m->r1, pg->victim);
 				ns->nfull ++;
+			} else {
+				ht_add (&ns->partials, pg->relns[i]);
 			}
 		}
 	} else {
@@ -356,6 +350,7 @@ void construct_relation (mpz_t qx, int32_t x, poly_t *p, nsieve_t *ns){
 	rel_t *rel = (rel_t *)(malloc(sizeof(rel_t)));
 	rel->poly = p;
 	rel->x = x;
+	rel->cofactor = 1;
 	rel->factors = NULL;
 	if (mpz_cmp_ui (qx, 0) < 0){
 		fl_add (rel, 0);
@@ -368,10 +363,10 @@ void construct_relation (mpz_t qx, int32_t x, poly_t *p, nsieve_t *ns){
 		fl_add (rel, 1);
 	}
 	for (i=1; i < ns->fb_len; i++){
-		if (get_offset (ns->fb[i], i, x, 0, p, p->group, ns) == 0 || get_offset (ns->fb[i], i, x, 1, p, p->group, ns) == 0){
+//		if (get_offset (ns->fb[i], i, x, 0, p, p->group, ns) == 0 || get_offset (ns->fb[i], i, x, 1, p, p->group, ns) == 0){
 //		if ((p->offsets1[i] -(p->M + x)) % ns->fb[i] == 0 || (p->offsets2[i] -(p->M + x)) % ns->fb[i] == 0){
-			mpz_divexact_ui(qx, qx, ns->fb[i]);
-			fl_add (rel, i+1);
+//			mpz_divexact_ui(qx, qx, ns->fb[i]);
+//			fl_add (rel, i+1);
 			if (mpz_fits_64 (qx)) goto fixedprec_tdiv;
 			while (mpz_divisible_ui_p (qx, ns->fb[i])){
 				mpz_divexact_ui(qx, qx, ns->fb[i]);
@@ -380,16 +375,19 @@ void construct_relation (mpz_t qx, int32_t x, poly_t *p, nsieve_t *ns){
 					goto fixedprec_tdiv;
 				}
 			}
-		}
+//		}
 	}
 fixedprec_tdiv:
 	q = mpz_get_64 (qx);
 	if (q < ns->fb[i] * ns->fb[i]){
 		if (q < ns->fb_bound){
 			fl_add (rel, fb_lookup (q, ns));
-			goto add_full_rel;
+			goto add_rel;
 		}
-		if (q < ns->lp_bound) goto add_partial_rel;
+		if (q < ns->lp_bound) {
+			rel->cofactor = q;
+			goto add_rel;
+		}
 	}
 	while (i < ns->fb_len){
 		while (q % ns->fb[i] == 0){
@@ -398,9 +396,12 @@ fixedprec_tdiv:
 			if (q < ns->fb[i] * ns->fb[i]){
 				if (q < ns->fb_bound){
 					fl_add (rel, fb_lookup (q, ns));
-					goto add_full_rel;
+					goto add_rel;
 				}
-				if (q < ns->lp_bound) goto add_partial_rel;
+				if (q < ns->lp_bound) {
+					rel->cofactor = q;
+					goto add_rel;
+				}
 			}
 		}
 		i++;
@@ -409,9 +410,8 @@ fixedprec_tdiv:
 	rel_free (rel);
 	return;
 
-add_full_rel:
+add_rel:
 	if (p->group->nrels < PG_REL_STORAGE){
-		rel->cofactor = 1;
 		p->group->relns[ p->group->nrels ] = rel;
 		p->group->nrels ++;
 		return;
@@ -419,11 +419,4 @@ add_full_rel:
 		rel_free(rel);
 		return;
 	}
-add_partial_rel:
-	rel->cofactor = q;
-	pthread_mutex_lock (&ns->lock);
-	ht_add (&ns->partials, rel);
-	pthread_mutex_unlock (&ns->lock);
-	return;
-
 }

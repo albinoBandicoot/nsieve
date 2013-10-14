@@ -181,7 +181,7 @@ uint32_t find_root (mpz_t k, uint32_t p){	// finds modular square root of k (mod
 		mpz_set_ui(pol, p);
 		mpz_powm_ui (temp, temp, m+1, pol);
 		return mpz_get_ui (temp);
-	} else if (p % 8 == 5){
+	} else if (p % 8 == 5){	// Case 2
 		uint32_t m = p/8;
 		mpz_set_ui (pol, p);
 		mpz_powm_ui (temp2, temp, 2*m+1, pol);
@@ -323,7 +323,7 @@ uint64_t mpz_get_64 (mpz_t a){
 /* Factor list ops */
 
 void fl_add (rel_t *rel, uint32_t p){
-	// prepend, because that is more efficient. It does mean that the list will be in reverse order, which should matter.
+	// prepend, because that is more efficient. It does mean that the list will be in reverse order, which should not matter.
 	fl_entry_t *entry = (fl_entry_t *) malloc(sizeof (fl_entry_t));
 	entry->fac = p;
 	entry->next = rel->factors;
@@ -339,15 +339,38 @@ void fl_free (rel_t * rel){
 	}
 }
 
+int fl_check (rel_t *rel, nsieve_t *ns){
+	fl_entry_t *entry = rel->factors;
+	while (entry != NULL){
+		if (entry->fac > ns->fb_len){
+			return 0;
+		}
+		entry = entry->next;
+	}
+	return 1;
+}
+
 void fl_fillrow (rel_t *rel, uint64_t *row, nsieve_t *ns){
 	clear_row (row, ns);
 	fl_entry_t *entry = rel->factors;
 	while (entry != NULL){
-		if (entry->fac < 0){
-			printf ("WARNING - bad factor: %d\n", -entry->fac);
+		if (entry->fac > ns->fb_len+1){
+			printf ("WARNING - bad factor: %d\n", entry->fac);
 		}
 		flip_bit (row, entry->fac);
 		entry = entry->next;
+	}
+}
+
+void fl_concat (rel_t *res, rel_t *victim){
+	fl_entry_t *entry = res->factors;
+	if (entry == NULL){
+		res->factors = victim->factors;
+	} else {
+		while (entry->next != NULL){
+			entry = entry->next;
+		}
+		entry->next = victim->factors;
 	}
 }
 
@@ -355,6 +378,7 @@ void rel_free (rel_t *rel){
 	fl_free (rel);
 	free (rel);
 }
+
 
 int fb_lookup (uint32_t p, nsieve_t *ns){
 	// returns the index of p in the factor base, plus 1 (for indexing into the matrix rows).

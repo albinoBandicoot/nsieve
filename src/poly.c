@@ -7,10 +7,7 @@ void polygroup_init (poly_group_t *pg, nsieve_t *ns){
 	pg->relns = (rel_t **) calloc (PG_REL_STORAGE, sizeof (rel_t *));
 	pg->nrels = 0;
 	pg->victim = NULL;
-	pg->victim_factors = (uint64_t *) calloc (ns->row_len, sizeof(uint64_t));
-	if (pg->victim_factors == NULL){	// memory allocation failed
-		printf("Fatal error - allocation of victim_factors (size %d) failed.\n", ns->row_len * 8);
-	}
+//	pg->victim_factors = (uint64_t *) calloc (ns->row_len, sizeof(uint64_t));
 	for (int i=0; i < ns->bvals; i++){
 		mpz_init (pg->bvals[i]);
 	}
@@ -327,4 +324,40 @@ void poly (mpz_t res, poly_t *p, int32_t x){
 	mpz_add    (res, res, p->b);	// res = ax + 2b
 	mpz_mul_si (res, res, x);	// res = ax^2 + 2bx
 	mpz_add    (res, res, p->c);	// res = ax^2 + 2bx + c
+}
+
+
+int rel_check (rel_t *rel, nsieve_t *ns){
+	mpz_t facprod, pol, temp;
+	mpz_inits (facprod, pol, temp, NULL);
+
+	poly (pol, rel->poly, rel->x);
+	poly (temp, rel->poly->group->victim->poly, rel->poly->group->victim->x);
+	mpz_mul (pol, pol, temp);
+
+	mpz_set_ui (facprod, rel->cofactor);
+	fl_entry_t *entry = rel->factors;
+	while (entry != NULL){
+		if (entry->fac == 0){
+			mpz_neg (facprod, facprod);
+		} else {
+			if (entry->fac < 0 || entry->fac > ns->fb_len){
+				printf ("fac out of bounds error: fac = %d\n", entry->fac);
+				mpz_clears (pol, temp, facprod, NULL);
+				return 0;
+			}
+			mpz_mul_ui (facprod, facprod, ns->fb[entry->fac - 1]);
+			if (!mpz_divisible_ui_p(pol, ns->fb[entry->fac - 1])){
+				mpz_clears (facprod, pol, NULL);
+				printf ("divisibility failed\n");
+				return 0;
+			}
+		}
+		entry = entry->next;
+	}
+//	mpz_mod (pol, pol, ns->N);
+//	mpz_mod (facprod, facprod, ns->N);
+	int res = (mpz_cmp (pol, facprod) == 0) ? 1 : 0;
+	mpz_clears (facprod, pol, NULL);
+	return res;
 }

@@ -26,7 +26,7 @@ void solve_matrix (nsieve_t *ns){
 		flip_bit (history[i], i);
 		rmos[i] = rightmost_1 (ns->relns[i].row, ns->fb_len);
 	}
-//#define MAT_CHECK
+#define MAT_CHECK
 #ifdef MAT_CHECK
 	uint64_t *expm[ns->rels_needed];
 	for (int i=0; i < hmsize; i++){
@@ -34,7 +34,7 @@ void solve_matrix (nsieve_t *ns){
 		for (int j=0; j<ns->row_len; j++){
 			expm[i][j] = ns->relns[i].row[j];
 		}
-		print_row(expm[i], 64 * ns->row_len);
+//		print_row(expm[i], 64 * ns->row_len);
 	}
 #endif
 	const int expm_rows = ns->rels_needed;
@@ -98,8 +98,10 @@ void solve_matrix (nsieve_t *ns){
 	mpz_t ncopy, temp;
 	mpz_init_set (ncopy, ns->N);
 	mpz_inits (temp, NULL);
+	uint16_t factor_counts[ns->fb_len+1];
 	for (int row = 0; row < expm_rows; row ++){
 		if (is_zero_vec (ns->relns[row].row, ns->row_len)){
+			memset (factor_counts, 0, 2 * (ns->fb_len + 1));	// clear the factor_counts table
 #ifdef MAT_CHECK
 			// This code will verify that the matrix solving worked; that is, it will xor together all of the rows
 			// specified in the history matrix, and verify that it is indeed the zero vector.
@@ -111,7 +113,7 @@ void solve_matrix (nsieve_t *ns){
 				}
 			}
 			if (is_zero_vec (check, ns->row_len)){
-				printf("Check succeeded.\n");
+//				printf("Check succeeded.\n");
 			} else {
 				printf("Check FAILED for row = %d\n", row);
 			}
@@ -122,52 +124,68 @@ void solve_matrix (nsieve_t *ns){
 			mpz_inits (lhs, rhs, NULL);
 			mpz_set_ui(lhs, 1);
 			mpz_set_ui(rhs, 1);
+			int np = 0;
 			for (int relnum = 0; relnum < hmsize; relnum ++){
 				if (get_bit (history[row], relnum) == 1){	// the relation numbered 'relnum' is included in the dependency
 					matrel_t *m = &ns->relns[relnum];
 
-					multiply_in_relation (lhs, rhs, m->r1, ns, 0);
-					if (m->r2 != NULL){	// partial
-						multiply_in_relation (lhs, rhs, m->r2, ns, 1);
-						mpz_divexact_ui (rhs, rhs, m->r1->cofactor);
-						mpz_divexact_ui (rhs, rhs, m->r1->cofactor);	// divide by the cofactor^2
-
-						mpz_set_ui (temp, m->r1->cofactor);
-						mpz_invert (temp, temp, ns->N);
-					//	mpz_mul (temp, temp, temp);
-						mpz_mul (lhs, lhs, temp);
-						mpz_mod (lhs, lhs, ns->N);
+					if (!rel_check (m->r1, ns)){
+						printf ("relation failed check. [%s]\n", m->r2==NULL?"full":"partial, r1");
+					} else {
+					//	printf ("relation passed check.\n");
 					}
-					// is this all there is to it?
+					multiply_in_lhs (lhs, m->r1, ns, 0);
+					add_factors_to_table (factor_counts, m->r1);
+					if (m->r2 != NULL){	// partial
+						np++;
+						if (m->r1->cofactor != m->r2->cofactor){
+							printf("AAAH - cofactors disagree! (%d and %d)\n", m->r1->cofactor, m->r2->cofactor);
+						}
+						if (!rel_check (m->r2, ns)){
+							printf ("relation failed check. [partial, r2]\n");
+						}
+						multiply_in_lhs (lhs,  m->r2, ns, 0);
+						add_factors_to_table (factor_counts, m->r2);
 
+						
+						mpz_mul_ui (rhs, rhs, m->r1->cofactor);
+			/*		
+						mpz_set_ui (temp, m->r2->cofactor);
+						mpz_invert (temp, temp, ns->N);
+						mpz_mul (lhs, lhs, temp);
+			*/			
+					}
 				}
 			}
-			// ok, now we have lhs^2 ~= rhs (mod N). rhs should be a square if all went well, so we shall take its sqrt to get
-			// 	lhs^2 ~= v^2 (mod N)
-			if (mpz_cmp_ui(rhs, 0) < 0){	// this shouldn't happen, since there should be an even number of (-1) factors.
-				mpz_neg(rhs, rhs);
-				printf("WARNING - found negative rhs; this should not happen; proceeding with taking |rhs|.\n");
-			} else {
-//				printf ("GOOD - rhs was positive.\n");
+			int is_good = construct_rhs (factor_counts, rhs, ns);
+			if ( ! is_good ) {
+				continue;
 			}
-			mpz_sqrt (temp, rhs);
-			mpz_mul (temp, temp, temp);
-			if (mpz_cmp (temp, rhs) != 0){
-				printf ("WARNING - rhs was not a square!!!\n");
-			}
-			mpz_sqrt (rhs, rhs);
+			mpz_mod (lhs, lhs, ns->N);
+			mpz_mod (rhs, rhs, ns->N);
 
-			mpz_mod (rhs, rhs, ns->N);	// this is only necessary to print out the congruence of squares.
-		//	fprintf("Found congruence of squares: ");
-		/*
+			/*
+			fprintf(stderr, "Found congruence of squares: ");
 			mpz_out_str(stderr, 10, lhs);
 			fprintf(stderr, " ");
 			mpz_out_str(stderr, 10, rhs);
 			fprintf(stderr, "\n");
-		*/
+			*/
+			mpz_t temp2;
+			mpz_init(temp2);
+			mpz_mul (temp, lhs, lhs);
+			mpz_mod (temp, temp, ns->N);
+			mpz_mul (temp2, rhs, rhs);
+			mpz_mod (temp2, temp2, ns->N);
+			if (mpz_cmp (temp, temp2) != 0){
+				printf("Squares are not congruent!!!\n");
+			}
+			mpz_clear(temp2);
+
 			mpz_sub (temp, rhs, lhs);
 			mpz_gcd (temp, temp, ncopy);	// take the gcd with ncopy instead of N, to avoid reprinting already found factors.
 			mpz_abs (temp, temp);	// probably unneceesary
+//			printf("np = %d\n", np);
 			if (mpz_cmp_ui (temp, 1) > 0){
 				if (mpz_cmp (temp, ns->N) != 0){	// then it's a nontrivial factor!!!
 					if (mpz_divisible_p(ncopy, temp)){	// then we haven't found it before.
@@ -201,9 +219,44 @@ void solve_matrix (nsieve_t *ns){
 			printf (" (c)\n");
 		}
 	}
-	ns->timing.facdeduct_time = clock() - start; }
+	ns->timing.facdeduct_time = clock() - start; 
+}
 
-void multiply_in_relation (mpz_t lhs, mpz_t rhs, rel_t *rel, nsieve_t *ns, int partial){	// this should work just as well for partials as for fulls.
+void add_factors_to_table (uint16_t *table, rel_t *rel){
+	fl_entry_t *factor = rel->factors;
+	while (factor != NULL){
+		table[factor->fac] ++;
+		factor = factor->next;
+	}
+}
+
+int construct_rhs (uint16_t *table, mpz_t rhs, nsieve_t *ns){	// returns nonzero on success, zero on failure.
+	if (table[0] % 2 != 0){
+		printf("Error: table[%d] is not even (=%d)\n", 0, table[0]);
+		return 0;
+	}
+	if ((table[0]/2) % 2 == 1){	// then we need to negate rhs
+		mpz_neg (rhs, rhs);
+	}
+	mpz_t temp;
+	mpz_init (temp);
+	for (int i=1; i < ns->fb_len + 1; i++){
+		if (table[i] % 2 != 0){
+			printf("Error: table[%d] is not even (=%d)\n", i, table[i]);
+			mpz_clear (temp);
+			return 0;
+		}
+		if (table[i] > 0){
+			mpz_ui_pow_ui (temp, ns->fb[i-1], table[i]/2);
+			mpz_mul (rhs, rhs, temp);
+			mpz_mod (rhs, rhs, ns->N);
+		}
+	}
+	mpz_clear(temp);
+	return 1;
+}
+
+void multiply_in_lhs (mpz_t lhs, rel_t *rel, nsieve_t *ns, int partial){	// this should work just as well for partials as for fulls.
 	mpz_t temp;
 	mpz_init (temp);
 
@@ -225,12 +278,5 @@ void multiply_in_relation (mpz_t lhs, mpz_t rhs, rel_t *rel, nsieve_t *ns, int p
 
 	mpz_mod (lhs, lhs, ns->N);
 
-	// now update RHS
-	// rhs *= p(victim.x) * q(rel.x)
-	poly (temp, victim->poly, victim->x);
-	mpz_mul (rhs, rhs, temp);
-
-	poly (temp, rel->poly, rel->x);
-	mpz_mul (rhs, rhs, temp);
-	// note that we can't reduce rhs mod N, since we have to take the sqrt of its final value in the integers.
+	mpz_clear (temp);
 }

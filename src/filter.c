@@ -1,6 +1,11 @@
 #include "filter.h"
 
 void build_matrix (nsieve_t * ns){
+	for (int i=0; i < ns->nfull; i++){
+		ns->relns[i].row = (uint64_t *) calloc (ns->row_len, 8);
+		fl_fillrow (ns->relns[i].r1, ns->relns[i].row, ns);
+	}
+	combine_partials (ns);
 }
 
 /* Whenever D partial relations share a cofactor, we can build D-1 full relations from them as follows:
@@ -20,14 +25,9 @@ void combine_bucket (ht_entry_t *h, nsieve_t *ns){
 			h = h->next;
 			continue;
 		}
-		/*
-		while (h != NULL && h->rel->poly->group->victim == NULL){	// we must skip it if there's no victim, because this means
-			// that the poly group it's associated with had no full relations, so the partials are unusable.
-			h = h->next;
-		}
-		*/
 		rel_t *base_rel = h->rel;
 		uint64_t base_factors[ns->row_len];
+		fl_concat (base_rel, base_rel->poly->group->victim);
 		fl_fillrow (base_rel, &base_factors[0], ns);
 //		fb_factor_rel (base_rel, &base_factors[0], ns);
 
@@ -40,13 +40,12 @@ void combine_bucket (ht_entry_t *h, nsieve_t *ns){
 				continue;	// we can't use this relation; there were no full relations in its pg to use as the victim.
 			}
 			matrel_t *m = &ns->relns[ns->nfull];
-			m -> r1 = base_rel;
-			m -> r2 = h -> rel;
+			m->row = (uint64_t *) calloc (ns->row_len, 8);
+			m -> r1 = h -> rel;
+			m -> r2 = base_rel;
+			fl_concat (h->rel, h->rel->poly->group->victim);
 			fl_fillrow (h->rel, m->row, ns);
-//			fb_factor_rel (h->rel, m->row, ns);
 			xor_row (m->row, &base_factors[0], ns->row_len);	// multiply the factorizations together.
-			xor_row (m->row, base_rel->poly->group->victim_factors, ns->row_len);	// and since this hasn't been done yet, multiply
-			xor_row (m->row, m->r2->poly->group->victim_factors, ns->row_len);		// in their corresponding victims.
 			ns->nfull ++;
 			if (ns -> nfull >= ns -> rels_needed){
 				return;

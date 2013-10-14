@@ -23,7 +23,8 @@ typedef struct {
 	uint32_t *ainverses;	// the values of a^-1 (mod p) for each p in the factor base. This stays the same for the whole group.
 
 	struct relation *victim;
-	uint64_t *victim_factors;
+
+//	uint64_t *victim_factors;
 	uint32_t nrels;
 	struct relation **relns;	// we store the relations we've collected for this poly group here. This facilitates keeping track of which
 				// rels we need to multiply by what, and also will make multithreading easier if we ever decide to do it.
@@ -109,7 +110,7 @@ typedef struct {
 
 typedef struct {
 	mpz_t N;		// the number to factor
-	unsigned char k;	// the number of distinct prime squares to use to construct polynomial 'A' values
+	unsigned char k;	// the number of distinct primes to use to construct polynomial 'A' values
 	unsigned short bvals;	// the number of distinct values for 'B' - given by 2^(k-1).
 	unsigned int  M;	// the sieve length. 
 	float T;		// The sieve threshold will be T * log(lp_bound).
@@ -125,10 +126,9 @@ typedef struct {
 	uint32_t multiplier;	// instead of factoring N, factor kN, for a small squarefree k. This enables us to pick a factor base that's nicer (more smooth relns).
 
 	uint32_t nfull;		// running count of the number of full relations found thus far.
-	uint32_t npartial;	// running count of the number of partial relations found so far. This will be updated by calling ht_count, probably at the end of each batch of polynomials (or maybe after each poly, depending on how many relations are being recovered from each poly vs. group)).
+	uint32_t npartial;	// running count of the number of partial relations found so far. This will be updated 
+				// by calling ht_count, probably at the end of each batch of polynomials
 
-	uint32_t tdiv_ct;	// number of relations that underwent trial division (passed the sieve)
-	uint64_t sieve_locs;	// how many positions were sieved.
 	uint32_t row_len;	// number of 64-bit chunks in a row of the matrix.
 	matrel_t *relns;	// this is the list of relations, and also constitutes the matrix. 
 
@@ -139,8 +139,12 @@ typedef struct {
 	pthread_t *threads;	
 	pthread_mutex_t lock;
 
+	/* These fields keep track of various properties of the sieving/timing, for informational purposes */
+
 	int info_npoly;
 	int info_npg;
+	uint32_t tdiv_ct;	// number of relations that underwent trial division (passed the sieve)
+	uint64_t sieve_locs;	// how many positions were sieved.
 
 	time_data_t timing;
 
@@ -179,8 +183,11 @@ int mpz_fits_64 (mpz_t a);
 /* Factor list ops */
 void fl_add (rel_t *, uint32_t);
 void fl_free (rel_t *);
+int  fl_check (rel_t *, nsieve_t *);
 void fl_fillrow (rel_t *, uint64_t *row, nsieve_t *ns);
+void fl_concat (rel_t *res, rel_t *victim);	// appends victim's list to res's list
 void rel_free (rel_t *);
+int  rel_check (rel_t *, nsieve_t *);	// checks whether the product of the factors in the list and the cofactor equals the polynomial evaluated at x.
 
 int  fb_lookup (uint32_t p, nsieve_t *);
 #endif

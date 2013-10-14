@@ -17,7 +17,7 @@ int main (int argc, const char *argv[]){
 	if (mpz_probab_prime_p(n, 12)){
 		mpz_out_str(stdout, 10, n);
 		printf("\n");
-		return;
+		return 0;
 	}
 	while (mpz_cmp_ui(n, 1) != 0){
 		while (mpz_divisible_ui_p(n, t)){
@@ -26,7 +26,7 @@ int main (int argc, const char *argv[]){
 			if (mpz_probab_prime_p(n, 12)){
 				mpz_out_str(stdout, 10, n);
 				printf("\n");
-				return;
+				return 0;
 			}
 		}
 		t += 2;

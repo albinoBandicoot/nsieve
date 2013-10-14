@@ -197,9 +197,6 @@ void nsieve_init (nsieve_t *ns, mpz_t n){
 	if (ns->row_len % 2 == 1) ns->row_len ++;	// to take advantage of SSE instructions, we want to chunk by 128 bits.
 
 	printf("There are %d primes in the factor base, so we will search for %d relations. The matrix rows will have %d 8-byte chunks in them.\n", ns->fb_len, ns->rels_needed, ns->row_len);
-	for (int i=0; i < ns->rels_needed; i++){
-		ns->relns[i].row = (uint64_t *)(calloc(ns->row_len, sizeof(uint64_t)));
-	}
 
 	ht_init (ns);
 	ns->timing.init_time = clock() - start;
@@ -239,7 +236,7 @@ void multithreaded_factor (nsieve_t *ns, int nthreads){
 	ns->timing.sieve_time = clock() - sievestart;
 	printf("\n");
 	/* Now proceed with the rest of the factorization in this thread */
-	combine_partials (ns);
+	build_matrix (ns);
 	solve_matrix (ns);
 	ns->timing.total_time = clock() - start;
 }
@@ -372,7 +369,7 @@ int main (int argc, const char *argv[]){
 	printf ("Removing small factors of N by trial division and pollard rho... \n");
 	tdiv (n, 32768);
 	rho  (n, 65536, 0);
-	if (mpz_cmp_ui (n, 1)){
+	if (mpz_cmp_ui (n, 1) == 0){
 		return 0;
 	} else if (mpz_probab_prime_p (n, 15)){
 		mpz_out_str(stdout, 10, n);
