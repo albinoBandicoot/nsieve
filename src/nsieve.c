@@ -81,18 +81,19 @@ const int PARAM_LPBOUND = 2;
 const int PARAM_M = 3;
 const int PARAM_T = 4;
 
-#define NPLEVELS  9	// number of entries in the params table
+#define NPLEVELS  10	// number of entries in the params table
 #define  NPARAMS  5
 //						bits   FBB    LPB  M   T
-const double params[NPLEVELS][NPARAMS] =   { 	{ 80,  2000,  50,  1 , 1.4},
-						{100,  5000,  50,  1 , 1.4},
-						{120,  8000,  60,  1 , 1.4},
-						{140, 17000,  80,  1 , 1.4},
-					    	{160, 30000,  110, 2 , 1.4},
-						{180, 66000,  120, 2 , 1.4},
-						{200, 120000, 130, 2 , 1.4}, /* beyond this point these are guesses. */
-						{220, 230000, 140, 2 , 1.4}, 	
-						{240, 430000, 155, 2 , 1.4}
+const double params[NPLEVELS][NPARAMS] =   { 	{ 80,  1600,  50,  1 , 1.4},
+						{100,  5000,  70,  1 , 1.45},
+						{120,  8000,  90,  1 , 1.5},
+						{140, 18000,  120, 1 , 1.5},
+					    	{160, 36000,  120, 1 , 1.45},
+						{180, 66000,  120, 1 , 1.45},
+						{200, 120000, 150, 2 , 1.5}, 
+						{220, 200000, 180, 2 , 1.55},/* beyond this point these are guesses. */ 	
+						{230, 280000, 195, 2 , 1.55},
+						{240, 360000, 210, 2 , 1.57}
 					   };
 
 /* Linearly interpolate parameters that were not manually overriden by the user between the adjacent
