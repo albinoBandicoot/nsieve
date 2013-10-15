@@ -14,7 +14,7 @@ int main (int argc, const char *argv[]){
 		printf("\n");
 		return 0;
 	}
-	rho  (n, 0xffff, 1);
+	rho  (n, 0xffffffff, 1);
 	mpz_clear (n);
 }
 

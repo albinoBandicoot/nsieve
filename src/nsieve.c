@@ -381,6 +381,9 @@ int main (int argc, const char *argv[]){
 	
 	/* If we found all of the factors by trial division or rho, or the cofactor after doing that
 	 * is prime, then we're done and we don't need to start the quadratic sieve. */
+	printf("Will factor N = ");
+	mpz_out_str (stdout, 10, n);
+	printf("\n");
 	if (mpz_cmp_ui (n, 1) == 0){
 		return 0;
 	} else if (mpz_probab_prime_p (n, 15)){

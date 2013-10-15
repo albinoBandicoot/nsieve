@@ -14,8 +14,15 @@
 #define KMAX 12			// the maximum allowable value for k. 
 #define BLOCKSIZE 131072	// the size of a sieve block. Entries are 1 byte.
 
+#ifdef USE_ASM
+#  define USE_ASM_XOR
+#  if USE_ASM == 64
+#    define USE_ASM_BITSCAN
+#  endif
+#endif
+
 struct relation;	// this is going to be a rel_t. We have to forward-declare it here; there was a
-			// cyclical dependency.
+			// cyclical dependency between poly_t, poly_group_t, and rel_t.
 
 /* This struct defines a group of polynomials that share a common 'A' value. */
 typedef struct {
@@ -197,6 +204,8 @@ typedef struct {
 void clear_row (uint64_t *, nsieve_t *);
 void flip_bit (uint64_t *, int);
 int  get_bit  (uint64_t *, int);
+extern void _asm_xor_row (uint64_t *res, uint64_t *op, int len);
+extern int  _bitscan (uint64_t);
 void xor_row  (uint64_t *res, uint64_t *op, int len);
 int  rightmost_1 (uint64_t *, int max_i);
 int  is_zero_vec (uint64_t *, int len);

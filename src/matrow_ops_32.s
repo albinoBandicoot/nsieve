@@ -1,9 +1,9 @@
 .file "matrow_ops_32.s"
 .text
-.globl xor_row
+.globl asm_xor_row
 .globl bitscan 
 
-xor_row:
+asm_xor_row:
 	movl 	12(%esp), %edx
 	movl	8(%esp), %ecx
 	movl	4(%esp), %eax
@@ -16,8 +16,7 @@ LOOP:
 	movdqu	%xmm1, (%eax)
 	addl	$16, %eax
 	addl	$16, %ecx
-	decl	%edx
-	decl	%edx
+	subl	$2, %edx
 	jmp	LOOP
 DONE:
 	cmpl	$1, %edx
@@ -31,7 +30,13 @@ RETURN:
 	ret
 	
 bitscan:
-	movl	4(%esp), %ecx
-	bsf	%eax, %ecx
+	cmpl	$0, 4(%esp)
+	je	HIGH_ORDER
+	bsr	4(%esp), %eax
+	ret
+	
+HIGH_ORDER:
+	bsr	8(%esp), %eax
+	addl	$32, %eax
 	ret
 	

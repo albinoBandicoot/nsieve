@@ -124,6 +124,8 @@ void solve_matrix (nsieve_t *ns){
 	for (int row = 0; row < expm_rows; row ++){
 		if (is_zero_vec (ns->relns[row].row, ns->row_len)){	// we found a dependency
 			memset (factor_counts, 0, 2 * (ns->fb_len + 1));	// clear the factor_counts table
+			int relct = 0;
+			int partialct = 0;
 #ifdef MAT_CHECK
 			// This code will verify that the matrix solving worked; that is, it will xor together all of the rows
 			// specified in the history matrix, and verify that it is indeed the zero vector.
@@ -146,7 +148,6 @@ void solve_matrix (nsieve_t *ns){
 			mpz_inits (lhs, rhs, NULL);
 			mpz_set_ui(lhs, 1);
 			mpz_set_ui(rhs, 1);
-			int np = 0;
 			for (int relnum = 0; relnum < hmsize; relnum ++){
 				if (get_bit (history[row], relnum) == 1){	// the relation numbered 'relnum' is included in the dependency
 					matrel_t *m = &ns->relns[relnum];
@@ -158,8 +159,9 @@ void solve_matrix (nsieve_t *ns){
 					}
 					multiply_in_lhs (lhs, m->r1, ns);
 					add_factors_to_table (factor_counts, m->r1);
+					relct ++;
 					if (m->r2 != NULL){	// partial
-						np++;
+						partialct ++;
 						if (m->r1->cofactor != m->r2->cofactor){
 							printf("AAAH - cofactors disagree! (%d and %d)\n", m->r1->cofactor, m->r2->cofactor);
 						}
@@ -175,7 +177,9 @@ void solve_matrix (nsieve_t *ns){
 				}
 			}
 			int is_good = construct_rhs (factor_counts, rhs, ns);
+//			printf ("multiplied together %d relations, %d of which were from partials\n", relct, partialct);
 			if ( ! is_good ) {	// more self-checks.
+				printf ("construct_rhs check failed.\n");
 				continue;
 			}
 			mpz_mod (lhs, lhs, ns->N);

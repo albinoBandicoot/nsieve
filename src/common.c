@@ -31,19 +31,15 @@ void flip_bit (uint64_t *m, int pos){
  * slightly more efficiently than this code, so this routine is only included in C if USE_ASM hasn't
  * been defined.
 */
-#ifndef USE_ASM
 void xor_row (uint64_t *res, uint64_t *op, int len){
+#ifdef USE_ASM_XOR
+	_asm_xor_row (res, op, len);
+#else
 	for (int i=0; i<len; i++){
 		res[i] = res[i] ^ op[i];
 	}
-}
 #endif
-
-/* bitscan is another assembly routine that takes advantage of the BSF instruction, which stands for
- * 'bit scan forwards' - it finds the position of the first 1 bit in the number. The function contains
- * all of 2 or 3 instructions. It will only be called if USE_ASM has been defined.
-*/
-extern int bitscan (uint32_t x);
+}
 
 /* Find the rightmost set bit in a row of the matrix, starting at column max_i. A value smaller than
  * the length for max_i is specified in some places in the matrix solving code when it is already 
@@ -55,14 +51,8 @@ int rightmost_1 (uint64_t *m, int max_i){
 	if (m[block] == 0) return -1;
 
 	// now we need to determine the rightmost 1 in m[block].
-#ifdef USE_ASM	// then we can use our bitscan() function. Unfortunately, it only works on 32-bit numbers.
-	uint32_t low = m[block];
-	uint32_t high = m[block] >> 32;
-	if (high == 0){
-		return (63 - 32 - bitscan(low)) + 64 * block;
-	} else {
-		return (63 - bitscan(high)) + 64 * block;
-	}
+#ifdef USE_ASM_BITSCAN	// then we can use our bitscan() function. 
+	return ( _bitscan(m[block])) + 64 * block;
 #else
 	// if we don't have asm, we do it ourselves in C.
 	uint64_t x = m[block];

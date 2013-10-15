@@ -1,9 +1,9 @@
 .file "matrow_ops_64.s"
 .text
-.globl _xor_row
+.globl _asm_xor_row
 .globl _bitscan 
 
-_xor_row:
+_asm_xor_row:
 LOOP:
 	cmpl	$1, %edx
 	jle	DONE
@@ -13,8 +13,7 @@ LOOP:
 	movdqu	%xmm1, (%rdi)
 	add	$16, %rdi
 	add	$16, %rsi
-	decl	%edx
-	decl	%edx
+	subl	$2, %edx
 	jmp	LOOP
 DONE:
 	cmpl	$1, %edx
@@ -25,6 +24,6 @@ RETURN:
 	ret
 	
 _bitscan:
-	bsf	%edi, %eax
+	bsrq	%rdi, %rax
 	ret
 	
