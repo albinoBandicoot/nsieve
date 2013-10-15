@@ -364,6 +364,12 @@ get quite large otherwise (several megabytes!).
 Implementation Details
 ----------------------
 
+Instead of writing a highly detailed description here, it is scattered among
+many (long and detailed) comments in the source. Perusing the source and these
+block comments, along with the understanding of the algorithm presented above,
+should enable you to follow the implementation fairly well. Here are a few 
+remarks:
+
 These symbols tend to mean the same thing throughout the program (and the above
 description):
 
@@ -440,30 +446,3 @@ data (like the value of N, the primes in the factor base, the precomputed
 square roots of N mod each prime, k, the list of relations, etc). One instance
 of it is constructed as part of the initialization, and it is passed all over
 the place. All threads share the same instance.
-
-
-Picking a Value for k
-~~~~~~~ ~ ~~~~~ ~~~ ~
-
-Taking Modular Square Roots
-~~~~~~ ~~~~~~~ ~~~~~~ ~~~~~
-
-At several points we have found it necessary to find solutions h to 
-h^2 ~= c (mod p), for prime p. This is taking a modular square root. The most
-obvious algorithm is by trying all h < p/2 until one is found (or if it isn't,
-we've done a very expensive proof that (h/p) = -1). I use two different 
-algorithms to handle distinct cases. 
-
-When p ~= 3 (mod 4) or p ~= 5 (mod 8), Pocklington's algorithm will work. 
-Otherwise, I use the Tonelli-Shanks algorithm, which is somewhat slower but
-still quite good (*much* better than the trial-and-error approach). 
-
-I do not really understand these algorithms (especially Tonelli-Shanks); I
-think I could understand Pocklington if I thought about it enough (espeically
-the p ~= 3 (mod 4) case). 
-
-Notes on Multithreading
-~~~~~ ~~ ~~~~~~~~~~~~~~
-
-Efficient RHS Computation in Factor Deduction
-~~~~~~~~~ ~~~ ~~~~~~~~~~~ ~~ ~~~~~~ ~~~~~~~~~
