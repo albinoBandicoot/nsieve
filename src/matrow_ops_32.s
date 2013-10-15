@@ -33,6 +33,5 @@ RETURN:
 bitscan:
 	movl	4(%esp), %ecx
 	bsf	%eax, %ecx
-;	bsfl	4(%esp), %eax
 	ret
 	

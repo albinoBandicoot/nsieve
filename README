@@ -1,6 +1,6 @@
 Welcome to nsieve, my implementation of the self-initializing quadratic sieve.
-It probably won't compete with amazing programs like msieve and yafu: its
-purpose is mostly for my own education. 
+This readme provides an overview of the programs and how to compile and run
+them. For a technical description of the algorithms, see README.technical.
 
 Nsieve relies on GMP for its arbitrary precision arithmetic. 
 
@@ -37,15 +37,17 @@ nsieve can accept an input number on either the command line or from stdin. It
 will attempt to select parameters that are good for this size number, however
 several of these can be overriden on the command line. The options are:
 	
-	-M	Set the number of blocks in the sieve interval for each poly.
-	-fbb	Set the factor base bound
-	-lpb	Set the large prime bound (as a multiplier on the FB bound)
-	-mult	Set the multiplier
-	-T	Set the trial-division cutoff multiplier.
-	-np	Turn off partial relations.
+	-M	  Set the number of blocks in the sieve interval for each poly.
+	-fbb	  Set the factor base bound
+	-lpb	  Set the large prime bound (as a multiplier on the FB bound)
+	-mult	  Set the multiplier
+	-T	  Set the trial-division cutoff multiplier.
+	-np	  Turn off partial relations.
+	-threads  Use a specified number of threads for sieving.	
 
 Each of these expects as the next argument a number (floating point for T, 
-integers for everything else).
+integers for everything else). Good values depend more or less strongly on the
+size of the number to factor, depending on the parameter.
 
 A number that is not associated with an option flag will be interpreted as the
 input number. If no such number is found, nsieve will wait for one to come in

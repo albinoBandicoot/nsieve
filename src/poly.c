@@ -1,5 +1,6 @@
 #include "poly.h"
 
+/* Initialize a polynomial group structure */
 void polygroup_init (poly_group_t *pg, nsieve_t *ns){
 	mpz_init (pg->a);
 	pg->ainverses = (uint32_t *) malloc(ns->fb_len * sizeof(uint32_t));
@@ -7,7 +8,6 @@ void polygroup_init (poly_group_t *pg, nsieve_t *ns){
 	pg->relns = (rel_t **) calloc (PG_REL_STORAGE, sizeof (rel_t *));
 	pg->nrels = 0;
 	pg->victim = NULL;
-//	pg->victim_factors = (uint64_t *) calloc (ns->row_len, sizeof(uint64_t));
 	for (int i=0; i < ns->bvals; i++){
 		mpz_init (pg->bvals[i]);
 	}
@@ -41,29 +41,35 @@ void poly_print (poly_t *p){
 	printf("\n");
 }
 
-uint32_t pi (uint32_t x){	// rough estimate of the prime-counting function. Implemented as x/ln(x).
+// rough estimate of the prime-counting function. Implemented as x/ln(x). Used in selection of 'k'
+uint32_t pi (uint32_t x){	
 	return (uint32_t) (x / log(x));
 }
 
+/* Analogue of the mpz_nextprime function, but going backwards. */
 void mpz_prevprime (mpz_t res){
 	mpz_sub_ui(res, res, 1);
-	while (!mpz_probab_prime_p(res, 10)){	// this will be fast for the even values, since mpz_probab_prime_p does a little trial division first.
+	while (!mpz_probab_prime_p(res, 10)){	// this will be fast for the even values, since 
+						// mpz_probab_prime_p does a little trial division first.
 		mpz_sub_ui(res, res, 1);
 	}
 }
 
 /* This routine will pick a value of k and an appropriate set of g values. 
- * We want to pick the largest value of k that will give us enough possible polynomials. If k is too large, the g values become very
- * small, and to produce enough distinct A, we end up with most A well outside the optimal range for our N and M. We take the following approach:
+ * We want to pick the largest value of k that will give us enough possible polynomial groups. If k is 
+ * too large, the g values become very small, and to produce enough distinct A, we end up with most A well 
+ * outside the optimal range for our N and M, because the differences between the g_i are significant fractions
+ * of their values. Consider an optimal A value of 10^20 and k = 10; each g is about 100; to get enough values
+ * of g, we'd need to go very far away from 100.  We take the following approach:
  *
- * Pick a minimum number of polynomials, minP, say 10^6 or 10^7. Pick a rather large k. Also pick a value 0 < c < 1. c will constrain
- * the range of allowable g values. Let Aopt be the optimal value of A (that is, sqrt(2N)/M). Then we only take g between (c * Aopt)^(1/k) and
- * (1/c * Aopt)^(1/k). 
+ * Pick a minimum number of polynomial groups, minP, say 25000. Pick a rather large k. Also pick a value 
+ * 0 < c < 1. c will constrain the range of allowable g values. Let Aopt be the optimal value of A (that 
+ * is, sqrt(2N)/M). Then we only take g between (c * Aopt)^(1/k) and (1/c * Aopt)^(1/k). 
  *
- * Determine the smallest q such that q C k > minP. (Note that these q can be precomputed (they don't depend on N) and stored as compile-time
- * constants). The range must contain at least q valid values of g. Instead of actually computing the number
- * of valid g, we can estimate it, using an approximation to pi(x), the prime-counting function. If we have a range, [gmin..gmax], then we can
- * estimate the # of valid g as
+ * Determine the smallest q such that q C k > minP. (Note that these q can be precomputed (they don't depend 
+ * on N) and stored as compile-time constants). The range must contain at least q valid values of g. Instead 
+ * of actually computing the number of valid g, we can estimate it, using an approximation to pi(x), the 
+ * prime-counting function. If we have a range, [gmin..gmax], then we can estimate the # of valid g as
  * 	
  * 	   pi(gmax) - pi(gmin)
  * #g ~=   ------------------            pi(x) ~= x / ln(x), for instance.
@@ -76,10 +82,13 @@ void mpz_prevprime (mpz_t res){
  * Once a suitable k has been found, find q/2 values of g on either side of Aopt^(1/k). This is the gpool.
 */
 
-// using minP = 10^6. Thank you to Mathematica for producing these values. 
-//uint32_t q[] = {1000000, 1414, 182, 71, 44, 33, 28, 25, 24, 23, 23, 23};	// beyond k=12, q actually increases again! (this makes sense if you think about it enough)
-uint32_t q[] = {25000, 224, 54, 30, 22, 19, 18, 18, 18, 18, 18, 19};	// these do much better for small inputs. However, 25000 polynomials may not be sufficient for some large factorizations, so we might have to select which table we want based on input number size.
+/* The precomputed values of Q for minP = 25000. Thank you Mathematica for solving the equations. It is 
+ * unlikely that a factorization will need more than 25000 _groups_ of polynomials, especially since for
+ * larger factorizations, k will be high, so each group might contain 1024 or more polys. */
+uint32_t q[] = {25000, 224, 54, 30, 22, 19, 18, 18, 18, 18, 18, 19};
 
+/* Initialize the gpool, which involves selecting k and computing all of the allowable g values, as 
+ * described above. */
 void gpool_init (poly_gpool_t *gp, nsieve_t *ns){
 	mpz_t aopt, temp, g;
 	mpz_inits(aopt, temp, g, NULL);
@@ -119,6 +128,7 @@ void gpool_init (poly_gpool_t *gp, nsieve_t *ns){
 	int ng = q[k-1];	// we must find this many g values.
 	gp->gpool = (uint32_t *) malloc (ng * sizeof (uint32_t));	// allocate the g pool
 
+	// fill in the upper half of the pool
 	int pos = ng/2;
 	mpz_set (g, temp);
 	while (pos < ng){
@@ -132,14 +142,13 @@ void gpool_init (poly_gpool_t *gp, nsieve_t *ns){
 	pos = ng/2 - 1;
 	mpz_set (g, temp);
 	while (pos >= 0){
-		mpz_prevprime(g);	// note that this is my function, not GMP's
+		mpz_prevprime(g);
 		if (mpz_kronecker (ns->N, g) == 1){
 			gp->gpool[pos] = mpz_get_ui(g);
 			pos--;
 		}
 	}
-	// initialize the rest of the fields
-	gp->center = mpz_get_ui (temp);	// I don't know if I need this field or not. Probably not.
+	// initialize the rest of the fields, including the frogs (see block comment in front of advance_gpool)
 	gp->ng = ng;
 	gp->frogs = (uint32_t *)(malloc(k * sizeof(uint32_t)));	// these hold indices into gpool.
 	for (int i=0; i < k; i++){
@@ -150,6 +159,20 @@ void gpool_init (poly_gpool_t *gp, nsieve_t *ns){
 	ns->bvals = 1 << (k-1);
 }
 
+/* We need a way to sequentially generate unique values of A. We initialize k 'frogs' to be the last 
+ * (highest) k primes in the gpool. Then, whenever advance_gpool is called, the highest frog (in the k'th 
+ * position of frogs) hops one slot backwards. If it can't (it's at the end of gpool), the next one back 
+ * tries to hop backwards. This continues until a frog is found who can hop (Billy). Then, all the frogs 
+ * higher than Billy (which were jammed up at the bottom of gpool) are set immediately following Billy. 
+ * A large enough gpool will be chosen so that we won't run out of combinations. 
+ *
+ * This also provides a mechanism for distributing the sieving work to the different threads. We make
+ * one gpool by calling gpool_init, then make a copy for each thread. Each copy will, as part of its 
+ * initialization, be advanced as many times as its thread number. All of them now have different A values.
+ * When a thread needs a new poly group (it's done sieving the previous one), it calls advance_gpool as 
+ * many times as there are sieve threads. This way all of the threads are guaranteed to produce distinct
+ * A values, without resorting to random selection and the potential for duplication of work.
+*/
 void advance_gpool (poly_gpool_t *gp, poly_group_t *group){	// advances the frogs, and sets the gvals field of 'group'
 	int k = gp->k;
 	// update group->gvals
@@ -168,7 +191,8 @@ void advance_gpool (poly_gpool_t *gp, poly_group_t *group){	// advances the frog
 			exit(1);
 		}
 	}
-	// j is now the index of the first frog that is not jammed against the end of the pool. Or edge of the pond, I suppose. Its name is Billy.
+	// j is now the index of the first frog that is not jammed against the end of the pool. 
+	// Or edge of the pond, I suppose. Its name is Billy.
 	// I guess for the frogs' sake its a good thing I'm not writing this in Python.
 	gp->frogs[j] --;	// advance Billy.
 	// now move all of the beached frogs back to being just ahead of billy, with no space between any of them.
@@ -180,6 +204,8 @@ void advance_gpool (poly_gpool_t *gp, poly_group_t *group){	// advances the frog
 	}
 }
 
+/* This will perform all of the work to set up the polygroup so that we may pull out polynomials from it. It
+ * does some precomputation (of A^-1 (mod p)) as well. */
 void generate_polygroup (poly_gpool_t *gp, poly_group_t *pg, nsieve_t *ns){
 	/* This is a tricky one. First we must choose A, by picking k primes g_i, and multiplying them together.
 	 * Then we need to find all of the values of B which satisfy  B^2 = N (mod a). There will be 2^(k-1) of them. 
@@ -187,19 +213,13 @@ void generate_polygroup (poly_gpool_t *gp, poly_group_t *pg, nsieve_t *ns){
 	 * to speed up the computation of Q(x) = 0 (mod p). 
 	*/
 	
-	// We want A to be about sqrt (2N) / M. Thus the primes we're looking at should be around [sqrt(2n)/M)] ^ (1/k).
-	// However, there is no particular requirement that they be of comparable sizes, so this is just a rough guide.
-	
-	for (int i=0; i < ns->nthreads; i++){
+	for (int i=0; i < ns->nthreads; i++){	// advance the gpool nthreads times to get our next set of gvals
 		advance_gpool (gp, pg);
 	}
-//	printf("Multiplying together these g-vals: %d", pg->gvals[0]);
 	mpz_set_ui (pg->a, pg->gvals[0]);	// multiply all of the g-values together to get A.
 	for (int i=1; i < gp->k; i++){
 		mpz_mul_ui(pg->a, pg->a, pg->gvals[i]);
-//		printf(", %d", pg->gvals[i]);
 	}
-//	printf("\n");
 	
 	/* Now that we've chosen A, we can compute the values of B. The goal is to produce all values of B which satisfy 
 	 * B^2 = N (mod A). Since A is composite, this is a little tricky, but we know it's prime factorization (that's how we
@@ -239,8 +259,10 @@ void generate_polygroup (poly_gpool_t *gp, poly_group_t *pg, nsieve_t *ns){
 	mpz_inits (t1, t2, NULL);
 	int w = 0;
 	for (int z = 0; z < (1 << k); z++){	// the ith bit of z will control which root r_i_? is used for the current B computation.
+
 		if (w == 1 << (k-1)) break;	// then we've found enough, and we don't need to look at the rest. This is really mostly just
 						// a safegard for us to not keep setting pg->bvals[w] when w is out of range.
+
 		mpz_set_ui (pg->bvals[w], 0);	// clear the B-value
 		for (int i=0; i < k; i++){	// for each G-value
 			mpz_set_ui (t2, pg->gvals[i]);			// t2 = g_i
@@ -270,7 +292,8 @@ void generate_polygroup (poly_gpool_t *gp, poly_group_t *pg, nsieve_t *ns){
 		if (invertable){	// good
 			pg -> ainverses[i] = mpz_get_ui (temp);
 		} else {
-			// hmmm. This is interesting. This should happen only when fb[i] == g_j. I don't know yet what exactly should happen here.
+			// hmmm. This is interesting. Does this ever occur? Maybe I should figure this out. 
+			// It seems to work fine, though.
 		}
 	}
 	mpz_clears (p, temp, NULL);
@@ -278,6 +301,8 @@ void generate_polygroup (poly_gpool_t *gp, poly_group_t *pg, nsieve_t *ns){
 
 extern uint32_t get_offset (uint32_t, int, int, int, poly_t *, poly_group_t *, nsieve_t *);
 
+/* Generate a polynomial from a group. generate_polygroup should have been called on the group before
+ * this method is called. It will get polynomial #i, corresponding to the i'th computed b value */
 void generate_poly (poly_t *p, poly_group_t *pg, nsieve_t *ns, int i){
 	p->group = pg;
 
@@ -287,31 +312,17 @@ void generate_poly (poly_t *p, poly_group_t *pg, nsieve_t *ns, int i){
 	mpz_mul (p->c, p->b, p->b);	 // C = b^2
 	mpz_sub (p->c, p->c, ns->N);	 // C = b^2 - N
 	mpz_divexact (p->c, p->c, p->a); // C = (b^2 - N) / a
-	// compute optimal sieve bound
+
 	mpz_t temp;
 	mpz_init (temp);
-/*
-	mpz_mul_ui(temp, ns->N, 2);
-	mpz_sqrt(temp, temp);
-	mpz_tdiv_q(temp, temp, p->a);
-*/	p->M = ns->M;
-	/*
-	p->M = mpz_get_ui(temp);
-	if (p->M <= 0.5 * BLOCKSIZE){	// p->M will store the NUMBER OF BLOCKS TOTAL to sieve.
-		p->M = 1;
-	} else {
-		p->M = (2 *p->M / BLOCKSIZE);
-	}
-	*/
-	// compute -B % p for each prime in the factor base.
+
+	p->M = ns->M;
+
+	// compute -B % p for each prime in the factor base. This is another precomputation for get_offset.
 	p -> bmodp = (uint32_t *) malloc (ns->fb_len * sizeof(uint32_t));
-//	p -> offsets1 = (uint32_t *) malloc (ns->fb_len * sizeof(uint32_t));
-//	p -> offsets2 = (uint32_t *) malloc (ns->fb_len * sizeof(uint32_t));
 	for (int i=0; i < ns->fb_len; i++){
 		mpz_neg (temp, p->b);
 		p->bmodp[i] = mpz_mod_ui (temp, temp, ns->fb[i]);
-//		p->offsets1[i] = get_offset (ns->fb[i], i, -p->M, 0, p, p->group, ns);
-//		p->offsets2[i] = get_offset (ns->fb[i], i, -p->M, 1, p, p->group, ns);
 	}
 	mpz_clear(temp);
 }
@@ -326,7 +337,8 @@ void poly (mpz_t res, poly_t *p, int32_t x){
 	mpz_add    (res, res, p->c);	// res = ax^2 + 2bx + c
 }
 
-
+/* Self-check on the validity of a relation. Makes sure the LHS and RHS correspond. This
+ * will detect errors in the factor lists, or perhaps in polynomial stuff as well. */
 int rel_check (rel_t *rel, nsieve_t *ns){
 	mpz_t facprod, pol, temp;
 	mpz_inits (facprod, pol, temp, NULL);

@@ -1,0 +1,469 @@
+This readme provides details of the Self-Initializing Quadratic Sieve algorithm
+and in-depth commentary on this particular implementation. There are also some
+long comments in the source that explain some of the same things.
+
+---------------------------------
+DESCRIPTION of the SIQS ALGORITHM
+---------------------------------
+
+In a sense, the quadratic sieve can be thought of as being inspired by Fermat's
+factoring algorithm, which attempted to find x and y such that
+
+	x^2 - y^2 = n    ==>  n = (x-y) * (x+y)
+
+where n is the number to factor. However, such pairs x,y are very difficult to 
+find, and in most cases Fermat's algorithm is slower than trial division. If, 
+however, we relax the restriction to finding 
+
+	x^2 ~= y^2 (mod n), where x != y (mod n)
+
+(x-y) and (x+y) _might_ (with probability about 1/2; I have not seen a good
+explanation for why this is the case) share a nontrivial factor with n. It is
+the aim of the Quadratic Sieve algorithm to find such a congruence of squares.
+
+However, such congruences of squares are still very difficult to find directly.
+Instead, we aim to produce many congruenecs where one side is a square, and the
+other is 'smooth' (has only small prime factors). A bound is selected, and the
+primes less than this bound form what is called the factor base. If more 
+congruences are collected than primes in the factor base, linear algebra can be
+used to find a subset of the congruences that will multiply together to ame a 
+square. Now both sides of the congruence are squares, and we can likely factor
+the input number.
+
+So far, none of this has been unique to the quadratic sieve - in fact, the 
+Continued Fractions algorithm and Schroeppel's linear sieve, as well as a
+scheme by Kraitchik that preceeded all of these, all use this collection of
+smooth relations and formation of squares with linear algebra as their basis.
+The differences between the algorithms are in how the congruences are produced.
+
+Factor Base and Sieving
+~~~~~~ ~~~~ ~~~ ~~~~~~~
+
+In the traditional, single-polynomial quadratic sieve, we work with
+
+	Q(x) = (x + sqrt(N))^2 - N
+
+where we take the integer square root. It is evident that for all values of x,
+Q(x) is a square mod N. Furthermore, when x is small, Q(x) is relatively small
+as well, which is excellent, since smaller values are much more likely to be
+smooth. The problem is now to figure out what values of x make Q(x) smooth. One
+approach would be to attempt to trial-divide each Q(x) in turn, keeping the
+ones that factored completely. This idea (with different details for generating
+the values) is used in the Continued Fractions method. However, due to the way
+we constructed the values, we can do better.
+
+It is not hard to show that for any polynomial (with integer coefficients), if
+an integer p | Q(x), then p | Q(x + kp) for all integers k. This enables us to
+use a sieve to determine which Q(x) are smooth. First, though, note that there
+are some primes p that will not divide any of the Q(x). For some x,
+
+        Q(x) ~= 0 (mod p)  ==>  (x + sqrt(N))^2 - N ~= 0 (mod p)
+                           ==>  x + sqrt(N) - modsqrt(N,p) ~= 0 (mod p)
+
+Solving this equation requires finding a modular square root, which only exists
+if N is a quadratic residue (mod p). Hence, the only primes that we need to 
+consider for our factor base are those for which (N/p) = 1 (where (N/p) denotes
+the Legendre symbol). 
+
+By solving Q(x_0) ~= 0 (mod p) for each p in the factor base, we can mark all
+sieve locations that are an integral multiple of p away from x_0 as being
+divisible by p, all without doing any divisions. In practice, estimates of 
+log(p) are added to each sieve location, and the results are compared with 
+estimates of log (Q(x)); if they are 'close enough,' they are trial-divided to
+verify their smoothness. Once enough smooth relations are collected, they are
+combined into a congruence of squares as previously described.
+
+The Curse of Growing Values
+~~~ ~~~~~ ~~ ~~~~~~~ ~~~~~~
+
+Even though Q(x) is technically quadratic in x, for our purposes it behaves as
+though it was essentially linear, since the linear coefficient is very large, 
+and x is relatively small (definitely under 10^10, while the linear coefficient
+is 2*sqrt(N), which might easily be 10^30). Hence, Q(x) is approximately equal
+to 2*x*sqrt(N). It is intuitively obvious that as numbers get larger, less and
+less of them will be smooth over our factor base, which is very bad news: less
+smooth values mean we accumulate relations (the term for a particular smooth
+value of Q(x)) more slowly. As we continue sieving higher values of x, the 
+relation throughput will drop off as Q(x) gets larger. 
+
+One might suggest simply using a larger factor base - then more Q(x) will
+be smooth, and so our relation throughput will increase. However, increasing 
+the size of the factor base also necessitates finding more relations. It turns
+out that the efficiency of the QS with respect to factor base size is 'saddle-
+shaped' - too small a factor base is inefficient because so few relations are
+smooth, even though fewer are needed; too large a factor base is inefficient
+because the increase in the frequency of smooth values does not make up for the
+increase in number of relations needed. The Goldilocks zone may be found
+somewhere in the middle.
+
+Fighting the 'drift towards infinity' of the size of Q(x) is a critical matter
+for the efficiency of the algorithm, and its practicality for factoring large
+numbers. One method, due to Davis, is as follows. 
+
+Davis's Approach
+~~~~~~~ ~~~~~~~
+
+Pick some fairly large prime Z (outside of the factor base), with (N/Z) = 1,
+and as before, find Q(x_0) such that Z | Q(x_0). Now, instead of sieving over
+all values, sieve over the arithmetic progression x_0 + kZ; that is, we are 
+considering for smoothness the values Q(x_0 + kZ). All of these values will be
+divisible by Z, so even though Q(x_0 + kZ) will grow faster than Q(k) as k 
+increases, one large factor is already known, so the remaining part that must
+be smooth, it turns out, has about the same size as the original version of QS.
+
+What distinguishes this method is the ability to pick another Z once the values
+start to become large. Then we're back to our small values again. There are a
+virtually unlimited number of suitable Z, so sufficiently many small values may
+be found.
+
+It may be tempting to switch Z very often, thus further reducing the average
+size of the values to be factored. Unfortunately, there is a problem with this
+approach. Since Z is not in the factor base, the relations produced by Davis's
+variant are not immediately useable - somehow this factor of Z has to be 
+removed or turned into a square (the linear algebra phase is only concerned
+with the primes in the factor base, so if any odd-power prime factors exist 
+outside of the factor base, the combined result will not be a square, and so a
+congruence of squares won't be produced). For each Z, one relation must be
+selected as a 'victim' and multiplied in to all of the others. The left hand
+side is still a square (it's a product of squares), and the right hand side is
+a product of primes in the factor base, and Z^2. 
+
+At least two relations must then be found for every Z, and more would be
+better. Z must be switched often, but not too often. This 'not too often' ends
+up being not as often as we would like.
+
+There is another major approach, due to Peter Montgomery, which is the multiple-
+polynomial quadratic sieve.
+
+Montgomery's Approach
+~~~~~~~~~~~~ ~~~~~~~~
+
+Instead of looking at just one polynomial, we will look at many polynomials,
+all of which share the form
+
+	Q(x) = Ax^2 + 2Bx + C   <==>  AQ(x) = (Ax + B)^2 - B^2 - AC
+
+The idea is to pick A, B, and C in such a way that nice things happen. One 
+restriction is that B^2 - AC = N, which makes A*Q(x) a square (mod N). Also,
+there is one parameter that influences the selection of these values that up to
+this point we have not been able to select, and that is the sieve interval. 
+Since we will be able to generate as many of these polynomials as we want, we
+can pick how long of a sieve interval we want. If we want to sieve from the
+interval [-M, M], we can choose A to match (minimizing the average value of the
+polynomial on that range). This is covered well in Pomerance's paper on the QS,
+so I will just state the result:
+
+	A should be about 2*sqrt(N) / M.
+
+Some deviation from this value will have little impact. Having chosen A, we
+must select values fo B and C such that B^2 - AC = N. This can be done by 
+picking A as a prime such that (N/A) = 1, and solving the resulting congruence
+B^2 ~= N (mod A) for B. C can then be chosen as (B^2 - N)/A (which will be an
+integer). 
+
+Now we have a polynomial that is optimized for the sieve interval that we
+specified (it will have lots of small values there), and when the interval is
+exhausted, another polynomial may be selected, by starting with a different 
+value for A. The drift to infinty has been conquered.
+
+The Cost of Switching Polynomials
+~~~ ~~~~ ~~ ~~~~~~~~~ ~~~~~~~~~~~
+
+Unfortunately, switching polynomials is not without cost, for at least two
+reasons. One is something much like the concern that plagued Davis's variation.
+Notice that it is no longer Q(x) that is a square mod N, but rather A*Q(x). 
+However, the values we factor in our sieve are the values of Q(x). To eliminate
+the A, it is again necessary to select one relation as a 'victim' and multiply
+all of the others with the same A value by it. Then we end up with
+
+	(Ax_0 + B)^2 * (Ax_i + B)^2 ~= A^2 * Q(x_0) * Q(x_i)  (mod N)
+
+When the Q(x) values on the RHS factor over the factor base, and are eventually
+combined into a congruence, the A^2 will not be a problem because it is a 
+square. However, it means, much like in Davis's approach, that we must have at
+least 2 relations for each polynomial for them to be useful. This in turn 
+restricts us to longer sieving intervals, and larger values of Q(x).
+
+There is another problem, however. For each polynomial, we must recompute for
+each prime p in the factor base the value x_0 such that p | Q(x_0). This 
+computation involves taking modular square roots of N (mod p) and modular
+inverses of A (mod p), which given that the factor base may contain several 
+thousand primes, and polynomial switching happens frequently, can take up a 
+significant portion of the total sieve time. It is worthwhile to note that 
+N (mod p) can be precomputed once at the beginning (it does not depend on the
+polynomial), but the computation of A^-1 (mod p) must be done each time. 
+If this initialization cost could be reduced, shorter sieve intervals might 
+be taken.
+
+Self-Initialization
+~~~~ ~~~~~~~~~~~~~~
+
+A modification of Montgomery's scheme brings us to the state of the art in
+terms of quadratic sieve variants. One part of how the A,B,C coefficients were
+selected was quite arbitrary - that A be prime. It turns out there is much to
+gain by allowing A to be composite.
+
+Pick some value k, which will be dependent on the size of number to factor and
+is probably best determined by experimentation or the method I use (see the
+implementation details section of this readme or the comments in poly.c). 
+Pick k distinct prime numbers g_i that are each about (2*sqrt(N)/M)^(1/k); that
+is, they multiply together to be about the ideal size for A that we determined 
+based on our desired sieve bound. Take A to be the product of these primes.
+
+Things are fundamentally not all that different, except now B^2 ~= N (mod A)
+will have multiple solutions. In fact, it will have 2^(k-1) solutions. The 
+solutions can be determined by a combination of finding the solutions (mod g_i)
+and using the Chinese Remainder Theorem. See the comments in poly.c for
+details.
+
+This is excellent on several fronts! For each A value, we now have 2^(k-1) 
+different polynomials (k is typically between 3 and 12, depending on the size
+of N). Since they all share the same A value, the A^-1 (mod p) computation can
+be done only once for each polynomial group, instead of for each polynomial;
+furthermore, all of the polynomials in the group contribute relations that
+share A, so we must only produce at least 2 relations per *group.* Both of the
+major factors pushing us towards longer sieve ranges have been significantly
+mitigated. With this scheme, it is not uncommon to produce on average 1/4 of a
+relation per polynomial. 
+
+Partial Relations
+~~~~~~~ ~~~~~~~~~
+
+With the algorithm as I've described it so far, there is a significant amount
+of valuable information that we're throwing away. Consider what happens if I
+find a sieve value that looks like it might be smooth, and I trial-divide it.
+I find that it is not quite smooth, but it only contains one prime factor
+beyond the factor base (which I know is prime because it's less than the square
+of the factor base bound). If I can find another such sieve value with the same
+large prime, I can multiply the "partial" relations together; the cofactor
+is now squared, and so the two combined can be used as a full relation (for the
+same exact reason that the factor A^2 in front of the product of Q(x)'s was 
+allowed). It follows that if I have d partials that share a cofactor, I can 
+construct d-1 full relations from them.  
+
+But surely it must be rare for two relations to share the same large prime! 
+This situation is an excellent example of the Birthday Paradox at work; it is
+in fact not so rare at all, especially since partial relations are much more
+abundant than full relations. Many QS implementations find 5 to 15 times as
+many partials as fulls. To find them effectively, the cutoff used for 
+determining whether a sieve location looks promising must be relaxed somewhat,
+resulting in more locations getting trial-divided, so there is definitely some
+cost associated with searching for partials. On the whole, it speeds things up.
+Often 1/4 to 1/2 of all relations found end up coming from the combination of
+partial relations.
+
+More Large Primes  (note: nsieve does not implement this)
+~~~~ ~~~~~ ~~~~~~
+
+It is possible to allow more than one large prime in the factorizations of the
+polynomial values. However, this variant (almost always with just 2 large
+primes) requires substantially more work to find its partials. It is not at all
+obvious when a polynomial value splits as the product of two large primes (along
+with factor base primes); methods such as Pollard's rho algorithm or Shanks'
+SQUFOF, or occasionally ECM have been used. This additional factoring
+requirement incurs significant overhead. 
+
+Once these partial-partials have been collected, combining them becomes a
+significantly more interesting problem. The idea is essentially to find sets
+of partial-partials so that all of the cofactors end up being squared when they
+are all multiplied together. The mechanics of this (along with ensuring that
+no redundancy is introduced) can get complicated; typically it is cast as a
+(multi)graph problem where cofactors are vertices and edges are relations, and
+some sort of spanning tree is involved. I'm fuzzy on the details.
+
+Typically using 2 large primes only becomes advantageous for numbers bigger
+than about 85 or 90 digits. There is some evidence that using 3 large primes
+might be beneficial starting in the 120s of digits, but at that point you
+should be using the Number Field Sieve anyway. 
+
+One other disadvantage of using more large primes is that the boolean exponent
+vectors (see the next section) are denser, which slows down the matrix step.
+
+Building and Filtering the Matrix
+~~~~~~~~ ~~~ ~~~~~~~~~ ~~~ ~~~~~~
+
+Once all of the relations have been collected, a matrix is built, one row for
+each relation. There is one column for each factor in the factor base, and an
+additional column for -1 to take care of the sign. The factorization of Q(x)
+for the relation is written out as an exponent vector (the i'th position in the
+vector is the exponent on the (i-1)st prime in the factor base (position 0 is 
+for -1)). These vectors are taken mod 2, since all we care about is whether the
+factors are squares or not. 
+
+You might recall that each relation was multiplied by a 'victim' that shared an
+A value; it is in fact the factorization of the product of Q(x_victim) and
+Q(x_i) that gets put in the exponent matrix. For partial relations, it will be
+the product of the factorizations of the two partials (note that each partial
+is also multiplied by a victim, so it's really 4 sets of factors getting
+combined). 
+
+Some work may be justified to reduce the size of the matrix, since this matrix
+will have to be solved. If no relations involve a certain prime, it can clearly
+be eliminated (its column can be removed). Furthermore, if only one relation
+uses a certain prime (has an odd exponent for this prime - note that as a
+square (or fourth power, etc) of the prime can occur in many other relations),
+that relation can be removed, since no other relation can be multiplied into it
+to cancel that factor out. The row can be removed, and then the column can as
+well, since it will now be empty. This process can be iterated (since removing
+one row may cause certain columns to now only have 1 bit set in them) until no
+more changes can be made. From my observations of other implementations of the
+QS, this filtering can reduce the dimension of the matrix by 25%. 
+
+Matrix Solving and Factor Deduction
+~~~~~~ ~~~~~~~ ~~~ ~~~~~~ ~~~~~~~~~
+
+Once all of the vectors have been computed, the matrix is solved (for example
+with Gaussian Elimination (what nsieve uses), or a fancier algorithm that is
+specialized for solving large sparse boolean matricies, like the block Lanczos
+algorithm, or the block Wiedemann algorithm). A 'history matrix' is initialized
+to the identity matrix and augmented to the exponent matrix; it is used to keep
+track of which relations get merged. The solving is especially efficient,
+because multiplication of exponent vectors mod 2 can be implemented as XOR.
+
+The matrix is then scanned for zero vectors, corresponding to a collection of 
+relations that have been multiplied together which yield a square. The 
+relations can be identified by the set bits in the history matrix. 
+
+Once we've found a zero-row in the matrix, we build up the left and right hand
+sides of our congruence of squares, one relation at a time. For each relation
+that was indicated by a 1-bit in this row of the history matrix:
+
+	multiply lhs by   (Ax_victim * B_victim)^2 * (Ax_i * B_i)^2
+	multiply rhs by   A^2 * Q_victim(x_victim) * Q_i(x_i)
+
+Note that the for the rhs, this can be re-interpreted as
+
+       multiply rhs by   A^2 * product (factors of Q_victim(x_victim)) 
+                               * product (factors of Q_i(x_i))
+
+Note that if the relation in question has been combined from two partial
+relations, we would have to do these multiplications twice, once for each
+partial relation. 
+
+At the end of this process, we will have the LHS being a square (clearly; it is
+a product of squares) as well as the RHS being a square: each exponent vector
+was constructed by doing exactly these multiplications of relations (except we
+ignored the A^2 part); the matrix solving gave us a subset that when all 
+multiplied together gave us a square.
+
+Furthermore, these two values will be congruent mod N, by construction. Behold, 
+our congruence of squares. We can now take the square root (in the integers) 
+of both sides, subtract (or add, it doesn't matter), and take the GCD with N. 
+About half the time a nontrivial factor should result.
+
+On a practical note, since both of these numbers are squares, and both have
+their square roots taken, it is much more efficient to compute the roots
+directly. Instead of multiply the LHS by (Ax + B)^2, we multiply by (Ax + B). 
+On the RHS, it's a little trickier; see the implementation details section or
+the comments in matrix.c. A more important bonus of doing it this way is that
+the computation can be carried out mod N (for both sides). The numbers could
+get quite large otherwise (several megabytes!). 
+
+
+----------------------
+Implementation Details
+----------------------
+
+These symbols tend to mean the same thing throughout the program (and the above
+description):
+
+N	  - the number to be factored
+A,B,C	  - the coefficients of the polynomials
+x	  - a point at which the polynomial is evaluated
+cofactor  - the prime portion of the partial relation that doesn't factor over
+                factor base.
+g, g_i	  - the primes from which polynomial 'A' values are constructed
+k	  - the number of g values to multiply together to get 'A'
+M	  - the size of (half of) the sieve interval (sieve from -M to M)
+p	  - a prime in the factor base
+
+The Files in this Program
+~~~ ~~~~~ ~~ ~~~~ ~~~~~~~
+
+This time, I decided to split my quadratic sieve implementation across multiple
+files. This was a *good idea.*
+
+common.c/h	- provides common routines and structure definitions. Things
+		  like hashtable operations, factor list operations, structs
+		  for defining relations, polynomials, poly groups, and 
+		  parameters go here.
+
+nseive.c/h	- contains the main top-level routines to run the quadratic
+		  sieve. Also does some of the one-time initialization work,
+		  like constructing the factor base.
+
+poly.c/h	- everything for dealing with generating and evaluating
+		  polynomials and polynomial groups.
+
+sieve.c/h	- the actual sieving/trial-division code.
+
+filter.c/h	- builds the matrix (constructs exponent vectors, combines the
+		  partial relations, etc), and will eventually include 
+		  filtering code once I get around to implementing it.
+
+matrix.c/h	- solving the matrix and deducing the factors.
+
+
+Overview of Internal Representations
+~~~~~~~~ ~~ ~~~~~~~~ ~~~~~~~~~~~~~~~
+
+nsieve uses GMP for its arbitrary precision arithmetic. An mpz_t is the type of
+an arbitrary precision integer, and almost all of the GMP operations that I use
+start with 'mpz_' (the one example that doesn't is gmp_randstate_init, which is
+only used in the 'numgen' program).
+
+There is a struct called a 'rel_t' which represents a relation. It has a
+pointer to its polynomial, its 'x' value, its cofactor (1 for full relations),
+and a fl_entry_t pointer, which represents a linked list of factors. Saving the
+factorizations in a list like this has many beneficial consequences.
+
+This is different than a matrel_t, which is used to represent one or two
+rel_t's which can be used to form a full relation (one if it's a full relation,
+two if they are partials). It also contains the packed row of the matrix, which
+gets allocated and filled in (by reference to the relations' factor lists) 
+during the matrix building stage.
+
+poly_t stores a polynomial, with a pointer to its group.
+
+poly_group_t stores information about all polynomials which share an 'A' value.
+
+poly_gpool_t stores state related to the generation of the 'A' values.
+
+The hashtable (hashtable_t and ht_entry_t) is used to store the partial
+relations. The partials are hashed using their cofactors, so partials that 
+share a cofactor end up in the same bucket. The buckets are kept sorted, so 
+determining how many and which partials can be combined is made easy and 
+efficient. 
+
+nsieve_t is a large struct which contains most of the parameters and common
+data (like the value of N, the primes in the factor base, the precomputed 
+square roots of N mod each prime, k, the list of relations, etc). One instance
+of it is constructed as part of the initialization, and it is passed all over
+the place. All threads share the same instance.
+
+
+Picking a Value for k
+~~~~~~~ ~ ~~~~~ ~~~ ~
+
+Taking Modular Square Roots
+~~~~~~ ~~~~~~~ ~~~~~~ ~~~~~
+
+At several points we have found it necessary to find solutions h to 
+h^2 ~= c (mod p), for prime p. This is taking a modular square root. The most
+obvious algorithm is by trying all h < p/2 until one is found (or if it isn't,
+we've done a very expensive proof that (h/p) = -1). I use two different 
+algorithms to handle distinct cases. 
+
+When p ~= 3 (mod 4) or p ~= 5 (mod 8), Pocklington's algorithm will work. 
+Otherwise, I use the Tonelli-Shanks algorithm, which is somewhat slower but
+still quite good (*much* better than the trial-and-error approach). 
+
+I do not really understand these algorithms (especially Tonelli-Shanks); I
+think I could understand Pocklington if I thought about it enough (espeically
+the p ~= 3 (mod 4) case). 
+
+Notes on Multithreading
+~~~~~ ~~ ~~~~~~~~~~~~~~
+
+Efficient RHS Computation in Factor Deduction
+~~~~~~~~~ ~~~ ~~~~~~~~~~~ ~~ ~~~~~~ ~~~~~~~~~

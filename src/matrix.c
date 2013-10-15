@@ -21,13 +21,15 @@ void solve_matrix (nsieve_t *ns){
 	const int hmsize = ns->rels_needed;
 	uint64_t *history[hmsize];
 	uint32_t rmos[hmsize];	// for keeping track of the position of the rightmost 1 in each exponent vector.
+				// caching these values greatly accelerates the matrix solving, since they are
+				// used often but change rarely.
 	for (int i=0; i < hmsize; i++){
 		history[i] = (uint64_t *) calloc (hmlen, sizeof(uint64_t));
 		flip_bit (history[i], i);
 		rmos[i] = rightmost_1 (ns->relns[i].row, ns->fb_len);
 	}
-#define MAT_CHECK
-#ifdef MAT_CHECK
+#define MAT_CHECK	// enables a couple of self-checks on the matrix solving. However, it requires making a 
+#ifdef MAT_CHECK	// copy of the exponent side of the matrix, so should be turned off for 'release' versions.
 	uint64_t *expm[ns->rels_needed];
 	for (int i=0; i < hmsize; i++){
 		expm[i] = (uint64_t *) malloc (ns->row_len * sizeof(uint64_t));
@@ -39,8 +41,11 @@ void solve_matrix (nsieve_t *ns){
 #endif
 	const int expm_rows = ns->rels_needed;
 	const int expm_cols = ns->fb_len + 1;
-	for (int col = expm_cols-1; col >= 0; col --){	// col starts at fb_len because there are fb_len + 1 columns in the matrix.
-		if ((expm_cols - col) % 50 == 0){
+
+	// this is the main loop of the Gaussian Elimination
+	// col starts at fb_len because there are fb_len + 1 columns in the matrix.
+	for (int col = expm_cols-1; col >= 0; col --){	
+		if ((expm_cols - col) % 50 == 0){	// print progress report
 			printf("Column %d of %d\r", expm_cols - col, expm_cols);
 			fflush(stdout);
 		}
@@ -52,7 +57,11 @@ void solve_matrix (nsieve_t *ns){
 			if (rmos[yolanda] == col){
 				xor_row (ns->relns[yolanda].row, ns->relns[pivot].row, ns->row_len);
 				xor_row (history[yolanda], history[pivot], hmlen);
-				rmos[yolanda] = rightmost_1 (ns->relns[yolanda].row, expm_cols-1);	// update the cached value of the rightmost 1.
+
+				/* update the cached value of the rightmost 1. We know the rightmost 1 of the 
+				 * xor'ed result has to be to the left of 'col', since that was the position
+				 * of the rightmost 1 of both yolanda and pivot, and the xor sets that to 0. */
+				rmos[yolanda] = rightmost_1 (ns->relns[yolanda].row, col);	
 			}
 		}
 	}
@@ -94,13 +103,26 @@ void solve_matrix (nsieve_t *ns){
  * This is our desired congruence of squres. 
 */
 
+/* It is impractical to compute the values of lhs^2 and rhs^2 explicitly, then take their square roots and reduce mod N;
+ * since several hundred relations may be combined into one congruence, these numbers might end up being many megabytes
+ * long (ask me how I know), which can slow things down a lot. It is fairly clear how to compute the lhs without
+ * computing lhs^2; since the coefficients of the polynomials are all known, it is just a matter of multiplying by
+ * H_q,i instead of (H_q,i)^2; furthermore, the value can be reduced mod N at each step.
+ *
+ * For the RHS, each relation's piece is not a square, so a similar approach is not possible. Instead, we keep a table,
+ * with one entry for each prime in the FB (and -1), and for each relation, we walk down its factor list, adding 1
+ * to the corresponding entries of the table. Doing this for all the relations will yield a table with all entries 
+ * being even (if all has gone well); the entries represent the exponents on the primes that when multiplied together
+ * produce the value of rhs^2. Looping over the values, and multiplying rhs by fb[i-1]^(table[i]/2) (and reducing mod
+ * N - this is very important that we can do this now!) will result in the correct computation of rhs.
+*/
 	mpz_divexact_ui (ns->N, ns->N, ns->multiplier);	// otherwise we will uncover the multiplier as a factor.
 	mpz_t ncopy, temp;
 	mpz_init_set (ncopy, ns->N);
 	mpz_inits (temp, NULL);
-	uint16_t factor_counts[ns->fb_len+1];
+	uint16_t factor_counts[ns->fb_len+1];	// this is the table we mentioned in the above comment.
 	for (int row = 0; row < expm_rows; row ++){
-		if (is_zero_vec (ns->relns[row].row, ns->row_len)){
+		if (is_zero_vec (ns->relns[row].row, ns->row_len)){	// we found a dependency
 			memset (factor_counts, 0, 2 * (ns->fb_len + 1));	// clear the factor_counts table
 #ifdef MAT_CHECK
 			// This code will verify that the matrix solving worked; that is, it will xor together all of the rows
@@ -129,12 +151,12 @@ void solve_matrix (nsieve_t *ns){
 				if (get_bit (history[row], relnum) == 1){	// the relation numbered 'relnum' is included in the dependency
 					matrel_t *m = &ns->relns[relnum];
 
-					if (!rel_check (m->r1, ns)){
+					if (!rel_check (m->r1, ns)){		// one can never have too much checking.
 						printf ("relation failed check. [%s]\n", m->r2==NULL?"full":"partial, r1");
 					} else {
 					//	printf ("relation passed check.\n");
 					}
-					multiply_in_lhs (lhs, m->r1, ns, 0);
+					multiply_in_lhs (lhs, m->r1, ns);
 					add_factors_to_table (factor_counts, m->r1);
 					if (m->r2 != NULL){	// partial
 						np++;
@@ -144,55 +166,33 @@ void solve_matrix (nsieve_t *ns){
 						if (!rel_check (m->r2, ns)){
 							printf ("relation failed check. [partial, r2]\n");
 						}
-						multiply_in_lhs (lhs,  m->r2, ns, 0);
+						multiply_in_lhs (lhs,  m->r2, ns);
 						add_factors_to_table (factor_counts, m->r2);
 
-						
-						mpz_mul_ui (rhs, rhs, m->r1->cofactor);
-			/*		
-						mpz_set_ui (temp, m->r2->cofactor);
-						mpz_invert (temp, temp, ns->N);
-						mpz_mul (lhs, lhs, temp);
-			*/			
+						mpz_mul_ui (rhs, rhs, m->r1->cofactor);	// the cofactors aren't stored
+									// in the lists, so we have to do them separately.
 					}
 				}
 			}
 			int is_good = construct_rhs (factor_counts, rhs, ns);
-			if ( ! is_good ) {
+			if ( ! is_good ) {	// more self-checks.
 				continue;
 			}
 			mpz_mod (lhs, lhs, ns->N);
 			mpz_mod (rhs, rhs, ns->N);
 
-			/*
-			fprintf(stderr, "Found congruence of squares: ");
-			mpz_out_str(stderr, 10, lhs);
-			fprintf(stderr, " ");
-			mpz_out_str(stderr, 10, rhs);
-			fprintf(stderr, "\n");
-			*/
-			mpz_t temp2;
-			mpz_init(temp2);
-			mpz_mul (temp, lhs, lhs);
-			mpz_mod (temp, temp, ns->N);
-			mpz_mul (temp2, rhs, rhs);
-			mpz_mod (temp2, temp2, ns->N);
-			if (mpz_cmp (temp, temp2) != 0){
-				printf("Squares are not congruent!!!\n");
-			}
-			mpz_clear(temp2);
-
 			mpz_sub (temp, rhs, lhs);
 			mpz_gcd (temp, temp, ncopy);	// take the gcd with ncopy instead of N, to avoid reprinting already found factors.
 			mpz_abs (temp, temp);	// probably unneceesary
-//			printf("np = %d\n", np);
+			/* Now we check to see if the factor we found was nontrivial (1 or n) */
 			if (mpz_cmp_ui (temp, 1) > 0){
 				if (mpz_cmp (temp, ns->N) != 0){	// then it's a nontrivial factor!!!
 					if (mpz_divisible_p(ncopy, temp)){	// then we haven't found it before.
-						if (mpz_probab_prime_p (temp, 10)){
+						if (mpz_probab_prime_p (temp, 10)){	// verify its primality
 							mpz_out_str (stdout, 10, temp);
 							printf (" (prp)\n");
 							mpz_divexact(ncopy, ncopy, temp);
+							/* If the cofactor is prime, print it out too */
 							if (mpz_probab_prime_p (ncopy, 10)){
 								mpz_out_str(stdout, 10, ncopy);
 								printf (" (prp)\n");
@@ -216,12 +216,15 @@ void solve_matrix (nsieve_t *ns){
 		if (mpz_probab_prime_p (ncopy, 10)){
 			printf (" (prp)\n");
 		} else {
+			/* It is a sad day. Most likely there is a bug. */
 			printf (" (c)\n");
 		}
 	}
 	ns->timing.facdeduct_time = clock() - start; 
 }
 
+/* For each entry of rel, increment position rel->fac of the table (the factor lists are storing
+ * matrix row positions, not the actual primes) */
 void add_factors_to_table (uint16_t *table, rel_t *rel){
 	fl_entry_t *factor = rel->factors;
 	while (factor != NULL){
@@ -230,6 +233,7 @@ void add_factors_to_table (uint16_t *table, rel_t *rel){
 	}
 }
 
+/* Given a filled out table, construct the right hand side of our fancy congruence */
 int construct_rhs (uint16_t *table, mpz_t rhs, nsieve_t *ns){	// returns nonzero on success, zero on failure.
 	if (table[0] % 2 != 0){
 		printf("Error: table[%d] is not even (=%d)\n", 0, table[0]);
@@ -256,27 +260,33 @@ int construct_rhs (uint16_t *table, mpz_t rhs, nsieve_t *ns){	// returns nonzero
 	return 1;
 }
 
-void multiply_in_lhs (mpz_t lhs, rel_t *rel, nsieve_t *ns, int partial){	// this should work just as well for partials as for fulls.
+/* Take care of what needs to be done to the LHS for this relation. This is called once for each
+ * component of the partial. */
+void multiply_in_lhs (mpz_t lhs, rel_t *rel, nsieve_t *ns) {	// this should work just as well for partials as for fulls.
 	mpz_t temp;
 	mpz_init (temp);
 
 	rel_t *victim = rel->poly->group->victim;
 
-	// lhs *= victimH * relH;  if victim poly = p and rel poly = q, this is (p.a * victim.x + p.b) * (q.a * rel.x + q.b)
+	// multiply the (Ax_victim + B_victim) for the victim that was used for this reln's poly group.
 	mpz_set_si (temp, victim->x);
 	mpz_mul (temp, temp, victim->poly->a);
 	mpz_add (temp, temp, victim->poly->b);
 	mpz_mul (lhs, lhs, temp);
 
+	// multiply the (Ax_i + B_i) for our relation
 	mpz_set_si (temp, rel->x);
 	mpz_mul (temp, temp, rel->poly->a);
 	mpz_add (temp, temp, rel->poly->b);
 	mpz_mul (lhs, lhs, temp);
 
+	// It's easier to deal with the A^2 factor here in the LHS, since we're actually looping over
+	// the relations here already. We multiply by the modular multiplicative inverse A^-1 (mod N)
+	// on the left.
 	mpz_invert (temp, victim->poly->a, ns->N);
 	mpz_mul (lhs, lhs, temp);
 
-	mpz_mod (lhs, lhs, ns->N);
+	mpz_mod (lhs, lhs, ns->N);	// reduce mod N to keep things small.
 
 	mpz_clear (temp);
 }

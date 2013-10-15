@@ -1,3 +1,4 @@
+$(shell mkdir bin build 2> /dev/null)
 CC=gcc
 CFLAGS= -g -O3 -pedantic -Wall -std=c99 -I./
 USE_ASM=0
